@@ -257,6 +257,10 @@ def to_bytes(size_str):
     else:
         raise ValueError(f"Unknown unit in size string: '{size_str}'")
 
+# Must match the -window (and -grty, if changed) used for the Tournament runs:
+# each recorded iteration moves TOURNAMENT_WINDOW messages in each direction.
+TOURNAMENT_WINDOW = 64
+
 def ComputeBandwidth(latency, bytes, collective, nodes):
 
     gbits = (bytes * 8) / 1e9  # Convert bytes to gigabits
@@ -265,6 +269,10 @@ def ComputeBandwidth(latency, bytes, collective, nodes):
         total_data = (nodes - 1) * gbits
     elif collective.split(" ")[0] == 'All-Gather':
         total_data = ((nodes-1)/nodes) * gbits
+    elif collective.split(" ")[0] == 'Tournament':
+        # pairwise full-duplex: a window of messages is exchanged each way
+        # per iteration, so the per-pair bidirectional volume is 2*window*msg.
+        total_data = 2 * TOURNAMENT_WINDOW * gbits
     else:
         raise ValueError(f"Unknown collective: {collective}")
 
