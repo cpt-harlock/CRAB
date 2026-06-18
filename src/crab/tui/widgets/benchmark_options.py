@@ -25,8 +25,9 @@ class BenchmarkOptions(VerticalScroll):
         data_table = self.query_one("#node_table", DataTable)
         data_table.add_column("Available Nodes")
 
-        # The topology button is only relevant for the "topology" source.
+        # Topology controls are only relevant for the "topology" source.
         self.query_one("#open_topology", Button).display = False
+        self.query_one("#topology_file_row").display = False
 
 
     def compose(self):
@@ -43,6 +44,9 @@ class BenchmarkOptions(VerticalScroll):
                 ("Topology Map", "topology")
             ], value="auto", id="nodes", classes="option-input")
             yield Input(placeholder="Path to node list file", id="node_file", classes="option-input")
+            with Horizontal(id="topology_file_row"):
+                yield Input(placeholder="Path to topology JSON file", id="topology_file")
+                yield Button("Browse…", id="browse_topology")
             yield Button("🗺  Open Topology Map", id="open_topology", variant="primary")
             yield DataTable(id="node_table", classes="datatable")
 
@@ -182,9 +186,17 @@ class BenchmarkOptions(VerticalScroll):
             data_table.clear()
 
             # Reset source-specific widgets; re-enable per branch below.
-            topo_button.display = (event.value == "topology")
+            is_topology = (event.value == "topology")
+            topo_button.display = is_topology
+            self.query_one("#topology_file_row").display = is_topology
             # Node count is derived from the topology selection, so lock it there.
-            self.query_one("#numnodes", Input).disabled = (event.value == "topology")
+            self.query_one("#numnodes", Input).disabled = is_topology
+
+            if is_topology:
+                # Pre-fill with the preset's topology as a default the user can change.
+                topo_input = self.query_one("#topology_file", Input)
+                if not topo_input.value.strip():
+                    topo_input.value = self._resolve_topology_path()
 
             if event.value == "file":
                 node_file_input.visible = True
@@ -223,14 +235,33 @@ class BenchmarkOptions(VerticalScroll):
                 node_file_input.value = ""
 
     # --- Topology-aware node selection ------------------------------------
+    @on(Button.Pressed, "#browse_topology")
+    def _browse_topology(self) -> None:
+        """Let the user pick any topology JSON file via a file dialog."""
+        from textual_fspicker import FileOpen
+
+        current = self.query_one("#topology_file", Input).value.strip()
+        start_dir = os.path.dirname(current) if current else ""
+        if not start_dir or not os.path.isdir(start_dir):
+            start_dir = "topologies" if os.path.isdir("topologies") else "."
+
+        self.app.push_screen(FileOpen(start_dir), self._on_topology_file_picked)
+
+    def _on_topology_file_picked(self, path) -> None:
+        if path:
+            self.query_one("#topology_file", Input).value = str(path)
+
     @on(Button.Pressed, "#open_topology")
     def _open_topology_map(self) -> None:
-        """Load the preset's topology file and open the graphical selector."""
-        topo_path = self._resolve_topology_path()
+        """Open the graphical selector for the chosen (or preset) topology file."""
+        # An explicit path in the input wins; fall back to the preset default.
+        topo_path = self.query_one("#topology_file", Input).value.strip()
+        if not topo_path:
+            topo_path = self._resolve_topology_path()
         if not topo_path:
             self.app.notify(
-                "No topology file configured for this preset. "
-                "Set a 'topology' path in presets.json.",
+                "No topology file selected. Use Browse… or set a 'topology' "
+                "path in presets.json.",
                 severity="warning",
             )
             return

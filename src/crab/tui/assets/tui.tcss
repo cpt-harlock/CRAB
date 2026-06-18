@@ -462,3 +462,17 @@ Select.option-input {
 #open_topology {
     margin: 1 0;
 }
+
+#topology_file_row {
+    width: auto;
+    height: auto;
+    margin: 1 0 0 0;
+}
+
+#topology_file {
+    width: 60;
+}
+
+#browse_topology {
+    margin-left: 1;
+}

@@ -105,7 +105,9 @@ Parser regex grammar is kept compatible with the reference repo
 [cinetic](https://github.com/cpt-harlock/cinetic) (`topology/topology.py`).
 
 Neutral-format topology files live in `topologies/`. Presets may set an optional
-`topology` key (sibling of `env`/`sbatch`/`header`) pointing to one. The TUI
+`topology` key (sibling of `env`/`sbatch`/`header`) pointing to one — this is
+only a **default**: the TUI shows the path in an editable field with a Browse…
+file picker, so the user can load any topology JSON. The TUI
 "Benchmark Options" tab exposes a **Topology Map** node source: the
 **Open Topology Map** button opens a graphical `ModalScreen`
 (`src/crab/tui/widgets/topology_map.py`) where cells → switches → nodes are
