@@ -1,0 +1,394 @@
+{
+  "format_version": 1,
+  "source": "tests/fixtures/example_ibnetdiscover.txt",
+  "stats": {
+    "n_nodes": 8,
+    "n_nics": 9,
+    "n_switches": 6,
+    "n_leaf_switches": 4,
+    "n_spine_switches": 2,
+    "n_cells": 2
+  },
+  "switches": [
+    {
+      "ib_name": "S-0000000000000001",
+      "description": "spine01 SP1",
+      "n_ports": 36,
+      "role": "spine",
+      "links": [
+        {
+          "local_port": 1,
+          "peer_name": "S-0000000000001001",
+          "peer_port": 1
+        },
+        {
+          "local_port": 2,
+          "peer_name": "S-0000000000001002",
+          "peer_port": 1
+        }
+      ]
+    },
+    {
+      "ib_name": "S-0000000000000002",
+      "description": "spine02 SP2",
+      "n_ports": 36,
+      "role": "spine",
+      "links": [
+        {
+          "local_port": 1,
+          "peer_name": "S-0000000000002001",
+          "peer_port": 1
+        },
+        {
+          "local_port": 2,
+          "peer_name": "S-0000000000002002",
+          "peer_port": 1
+        }
+      ]
+    },
+    {
+      "ib_name": "S-0000000000001001",
+      "description": "leaf01 L1",
+      "n_ports": 36,
+      "role": "leaf",
+      "links": [
+        {
+          "local_port": 1,
+          "peer_name": "S-0000000000000001",
+          "peer_port": 1
+        },
+        {
+          "local_port": 2,
+          "peer_name": "H-00000000000000a1",
+          "peer_port": 1
+        },
+        {
+          "local_port": 3,
+          "peer_name": "H-00000000000000a2",
+          "peer_port": 1
+        },
+        {
+          "local_port": 4,
+          "peer_name": "H-00000000000000a3",
+          "peer_port": 1
+        }
+      ]
+    },
+    {
+      "ib_name": "S-0000000000001002",
+      "description": "leaf02 L2",
+      "n_ports": 36,
+      "role": "leaf",
+      "links": [
+        {
+          "local_port": 1,
+          "peer_name": "S-0000000000000001",
+          "peer_port": 1
+        },
+        {
+          "local_port": 2,
+          "peer_name": "H-00000000000000a4",
+          "peer_port": 1
+        },
+        {
+          "local_port": 3,
+          "peer_name": "H-00000000000000a5",
+          "peer_port": 1
+        }
+      ]
+    },
+    {
+      "ib_name": "S-0000000000002001",
+      "description": "leaf03 L3",
+      "n_ports": 36,
+      "role": "leaf",
+      "links": [
+        {
+          "local_port": 1,
+          "peer_name": "S-0000000000000002",
+          "peer_port": 1
+        },
+        {
+          "local_port": 2,
+          "peer_name": "H-00000000000000a6",
+          "peer_port": 1
+        },
+        {
+          "local_port": 3,
+          "peer_name": "H-00000000000000a7",
+          "peer_port": 1
+        }
+      ]
+    },
+    {
+      "ib_name": "S-0000000000002002",
+      "description": "leaf04 L4",
+      "n_ports": 36,
+      "role": "leaf",
+      "links": [
+        {
+          "local_port": 1,
+          "peer_name": "S-0000000000000002",
+          "peer_port": 1
+        },
+        {
+          "local_port": 2,
+          "peer_name": "H-00000000000000a8",
+          "peer_port": 1
+        },
+        {
+          "local_port": 3,
+          "peer_name": "H-00000000000000a9",
+          "peer_port": 1
+        }
+      ]
+    }
+  ],
+  "nics": [
+    {
+      "ib_name": "H-00000000000000a1",
+      "description": "lrdn0001 mlx5_0",
+      "n_ports": 1,
+      "node": "lrdn0001",
+      "switch": "S-0000000000001001",
+      "links": [
+        {
+          "local_port": 1,
+          "peer_name": "S-0000000000001001",
+          "peer_port": 2
+        }
+      ]
+    },
+    {
+      "ib_name": "H-00000000000000a2",
+      "description": "lrdn0001 mlx5_1",
+      "n_ports": 1,
+      "node": "lrdn0001",
+      "switch": "S-0000000000001001",
+      "links": [
+        {
+          "local_port": 1,
+          "peer_name": "S-0000000000001001",
+          "peer_port": 3
+        }
+      ]
+    },
+    {
+      "ib_name": "H-00000000000000a3",
+      "description": "lrdn0002 mlx5_0",
+      "n_ports": 1,
+      "node": "lrdn0002",
+      "switch": "S-0000000000001001",
+      "links": [
+        {
+          "local_port": 1,
+          "peer_name": "S-0000000000001001",
+          "peer_port": 4
+        }
+      ]
+    },
+    {
+      "ib_name": "H-00000000000000a4",
+      "description": "lrdn0003 mlx5_0",
+      "n_ports": 1,
+      "node": "lrdn0003",
+      "switch": "S-0000000000001002",
+      "links": [
+        {
+          "local_port": 1,
+          "peer_name": "S-0000000000001002",
+          "peer_port": 2
+        }
+      ]
+    },
+    {
+      "ib_name": "H-00000000000000a5",
+      "description": "lrdn0004 mlx5_0",
+      "n_ports": 1,
+      "node": "lrdn0004",
+      "switch": "S-0000000000001002",
+      "links": [
+        {
+          "local_port": 1,
+          "peer_name": "S-0000000000001002",
+          "peer_port": 3
+        }
+      ]
+    },
+    {
+      "ib_name": "H-00000000000000a6",
+      "description": "lrdn0005 mlx5_0",
+      "n_ports": 1,
+      "node": "lrdn0005",
+      "switch": "S-0000000000002001",
+      "links": [
+        {
+          "local_port": 1,
+          "peer_name": "S-0000000000002001",
+          "peer_port": 2
+        }
+      ]
+    },
+    {
+      "ib_name": "H-00000000000000a7",
+      "description": "lrdn0006 mlx5_0",
+      "n_ports": 1,
+      "node": "lrdn0006",
+      "switch": "S-0000000000002001",
+      "links": [
+        {
+          "local_port": 1,
+          "peer_name": "S-0000000000002001",
+          "peer_port": 3
+        }
+      ]
+    },
+    {
+      "ib_name": "H-00000000000000a8",
+      "description": "lrdn0007 mlx5_0",
+      "n_ports": 1,
+      "node": "lrdn0007",
+      "switch": "S-0000000000002002",
+      "links": [
+        {
+          "local_port": 1,
+          "peer_name": "S-0000000000002002",
+          "peer_port": 2
+        }
+      ]
+    },
+    {
+      "ib_name": "H-00000000000000a9",
+      "description": "lrdn0008 mlx5_0",
+      "n_ports": 1,
+      "node": "lrdn0008",
+      "switch": "S-0000000000002002",
+      "links": [
+        {
+          "local_port": 1,
+          "peer_name": "S-0000000000002002",
+          "peer_port": 3
+        }
+      ]
+    }
+  ],
+  "nodes": [
+    {
+      "hostname": "lrdn0001",
+      "nics": [
+        "H-00000000000000a1",
+        "H-00000000000000a2"
+      ],
+      "switches": [
+        "S-0000000000001001"
+      ],
+      "cell": "cell01"
+    },
+    {
+      "hostname": "lrdn0002",
+      "nics": [
+        "H-00000000000000a3"
+      ],
+      "switches": [
+        "S-0000000000001001"
+      ],
+      "cell": "cell01"
+    },
+    {
+      "hostname": "lrdn0003",
+      "nics": [
+        "H-00000000000000a4"
+      ],
+      "switches": [
+        "S-0000000000001002"
+      ],
+      "cell": "cell01"
+    },
+    {
+      "hostname": "lrdn0004",
+      "nics": [
+        "H-00000000000000a5"
+      ],
+      "switches": [
+        "S-0000000000001002"
+      ],
+      "cell": "cell01"
+    },
+    {
+      "hostname": "lrdn0005",
+      "nics": [
+        "H-00000000000000a6"
+      ],
+      "switches": [
+        "S-0000000000002001"
+      ],
+      "cell": "cell02"
+    },
+    {
+      "hostname": "lrdn0006",
+      "nics": [
+        "H-00000000000000a7"
+      ],
+      "switches": [
+        "S-0000000000002001"
+      ],
+      "cell": "cell02"
+    },
+    {
+      "hostname": "lrdn0007",
+      "nics": [
+        "H-00000000000000a8"
+      ],
+      "switches": [
+        "S-0000000000002002"
+      ],
+      "cell": "cell02"
+    },
+    {
+      "hostname": "lrdn0008",
+      "nics": [
+        "H-00000000000000a9"
+      ],
+      "switches": [
+        "S-0000000000002002"
+      ],
+      "cell": "cell02"
+    }
+  ],
+  "cells": [
+    {
+      "id": 1,
+      "name": "cell01",
+      "leaf_switches": [
+        "S-0000000000001001",
+        "S-0000000000001002"
+      ],
+      "spine_switches": [
+        "S-0000000000000001"
+      ],
+      "nodes": [
+        "lrdn0001",
+        "lrdn0002",
+        "lrdn0003",
+        "lrdn0004"
+      ]
+    },
+    {
+      "id": 2,
+      "name": "cell02",
+      "leaf_switches": [
+        "S-0000000000002001",
+        "S-0000000000002002"
+      ],
+      "spine_switches": [
+        "S-0000000000000002"
+      ],
+      "nodes": [
+        "lrdn0005",
+        "lrdn0006",
+        "lrdn0007",
+        "lrdn0008"
+      ]
+    }
+  ]
+}

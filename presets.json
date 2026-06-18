@@ -6,7 +6,8 @@
             "CRAB_WRAPPERS_PATH": "__CWD__/wrappers"
         },
         "sbatch": [],
-        "header": []
+        "header": [],
+        "topology": ""
     },
     "alps": {
         "description": "ALPS Cluster Environment",
@@ -161,7 +162,8 @@
             "CRAB_BW_SATURATING_SIZE": "16777216"
         },
         "sbatch": [],
-        "header": []
+        "header": [],
+        "topology": "topologies/example.json"
     },
     "lumi": {
         "description": "LUMI Supercomputer",
@@ -256,6 +258,7 @@
             "ENV_EXAMPLE": "ENV_VALUE"
         },
         "sbatch": [],
-        "header": []
+        "header": [],
+        "topology": "topologies/example.json"
     }
 }

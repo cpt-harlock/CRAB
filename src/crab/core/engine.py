@@ -18,6 +18,30 @@ from typing import List, Dict, Any, Callable, Optional, Union
 # 1. DATA CONTAINERS & UTILITIES
 # =============================================================================
 
+def normalize_nodelist(nodelist: Any) -> List[str]:
+    """Normalize a config 'nodelist' into an ordered, de-duplicated host list.
+
+    Accepts a Python list or a string with hosts separated by commas and/or
+    whitespace (e.g. "node01,node02" or "node01 node02"). Returns [] if empty.
+    Note: items are taken verbatim, so already-expanded hostnames are expected
+    (the topology selector emits explicit hostnames, not Slurm range syntax).
+    """
+    if not nodelist:
+        return []
+    if isinstance(nodelist, str):
+        tokens = [h.strip() for h in nodelist.replace(',', ' ').split()]
+    else:
+        tokens = [str(h).strip() for h in nodelist]
+
+    seen = set()
+    result = []
+    for host in tokens:
+        if host and host not in seen:
+            seen.add(host)
+            result.append(host)
+    return result
+
+
 class DataContainer:
     """Holds runtime metrics for a specific application."""
     def __init__(self, app_id: int, conv_goal: bool, label: str, unit: str, msg_size: int = 0):
@@ -562,15 +586,25 @@ class Engine:
         """
         Generates the list of #SBATCH lines handling defaults, overrides, and security.
         """
+        # Esplicita lista di nodi (es. dalla mappa topologica della TUI): vincola
+        # il job esattamente a questi host e forza il conteggio nodi a combaciare.
+        nodelist = normalize_nodelist(global_opts.get('nodelist'))
+        num_nodes_directive = len(nodelist) if nodelist else global_opts.get('numnodes')
+
         # 1. Definizione dei Parametri Protetti (Il framework vince sempre)
         # Mappa: Chiave -> Valore calcolato dal framework
         protected_defaults = {
-            'nodes': f"--nodes={global_opts.get('numnodes')}",
+            'nodes': f"--nodes={num_nodes_directive}",
             'ntasks-per-node': f"--ntasks-per-node={global_opts.get('ppn', 1)}",
             # Alias comuni da bloccare
-            'N': None, 
+            'N': None,
             'n': None, # Blocchiamo -n per sicurezza se l'utente prova a passarlo
+            # Quando Crab gestisce una selezione esplicita, blocca gli override utente.
+            'nodelist': None,
+            'w': None,  # alias breve di --nodelist
         }
+        if nodelist:
+            protected_defaults['nodelist'] = "--nodelist=" + ",".join(nodelist)
 
         # 2. Definizione dei Default Sovrascrivibili
         # Mappa: Chiave univoca -> Stringa completa direttiva
@@ -653,8 +687,16 @@ class Engine:
 
         g_opts = config.get('global_options', {})
         data_path = g_opts.get('datapath', './data')
-        num_nodes = int(g_opts.get('numnodes'))
-        
+
+        # An explicit nodelist (e.g. from the topology selector) defines the node
+        # count; fall back to the numnodes field otherwise.
+        nodelist = normalize_nodelist(g_opts.get('nodelist'))
+        if nodelist:
+            num_nodes = len(nodelist)
+            g_opts['numnodes'] = num_nodes  # keep downstream consumers consistent
+        else:
+            num_nodes = int(g_opts.get('numnodes'))
+
         # Setup Directory
         desc_file = os.path.join(data_path, "description.csv")
         os.makedirs(data_path, exist_ok=True)

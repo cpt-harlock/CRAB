@@ -3,6 +3,11 @@ from textual.widgets import Button, DataTable, Input, Label, Select, Switch
 from textual import on
 
 import subprocess
+import json
+import os
+
+from .topology_map import TopologyMapScreen
+from crab.topology import Topology
 
 class BenchmarkOptions(VerticalScroll):
     """Un widget per configurare ed eseguire un benchmark."""
@@ -10,6 +15,8 @@ class BenchmarkOptions(VerticalScroll):
     def __init__(self, app_ref):
         super().__init__()
         self.app_ref = app_ref
+        # Hostnames chosen through the graphical topology selector (if used).
+        self.selected_nodes: list[str] = []
 
     def on_mount(self) -> None:
         """Imposta il titolo del bordo quando il widget viene montato."""
@@ -17,6 +24,9 @@ class BenchmarkOptions(VerticalScroll):
 
         data_table = self.query_one("#node_table", DataTable)
         data_table.add_column("Available Nodes")
+
+        # The topology button is only relevant for the "topology" source.
+        self.query_one("#open_topology", Button).display = False
 
 
     def compose(self):
@@ -29,9 +39,11 @@ class BenchmarkOptions(VerticalScroll):
                 ("All Nodes", "auto"),
                 ("Mixed Nodes", "mixed"),
                 ("Idle Nodes", "idle"),
-                ("From File", "file")
+                ("From File", "file"),
+                ("Topology Map", "topology")
             ], value="auto", id="nodes", classes="option-input")
             yield Input(placeholder="Path to node list file", id="node_file", classes="option-input")
+            yield Button("🗺  Open Topology Map", id="open_topology", variant="primary")
             yield DataTable(id="node_table", classes="datatable")
 
         # --- Argomenti Opzionali ---
@@ -125,6 +137,10 @@ class BenchmarkOptions(VerticalScroll):
             # Usiamo l'ID del widget come chiave per lo stato
             if widget.id:
                 state[widget.id] = widget.value
+
+        # Explicit topology selection -> pass an explicit nodelist to the engine.
+        if state.get("nodes") == "topology" and self.selected_nodes:
+            state["nodelist"] = list(self.selected_nodes)
         return state
 
     def set_state(self, state: dict) -> None:
@@ -136,6 +152,18 @@ class BenchmarkOptions(VerticalScroll):
         """
         if not state:
             return
+
+        # 'nodelist' is not a widget: restore it into the topology selection.
+        state = dict(state)
+        nodelist = state.pop("nodelist", None)
+        if nodelist:
+            if isinstance(nodelist, str):
+                self.selected_nodes = [
+                    h.strip() for h in nodelist.replace(",", " ").split() if h.strip()
+                ]
+            else:
+                self.selected_nodes = list(nodelist)
+
         for widget_id, value in state.items():
             try:
                 widget = self.query_one(f"#{widget_id}", (Input, Select, Switch))
@@ -144,18 +172,32 @@ class BenchmarkOptions(VerticalScroll):
                 self.app.log(f"Could not set state for widget '{widget_id}': {e}")
 
 
-    @on (Select.Changed) 
+    @on (Select.Changed)
     def on_select_changed(self, event: Select.Changed) -> None:
         """Gestisce i cambiamenti nelle selezioni."""
         if event.select.id == "nodes":
             node_file_input = self.query_one("#node_file", Input)
-
+            topo_button = self.query_one("#open_topology", Button)
             data_table = self.query_one("#node_table", DataTable)
             data_table.clear()
 
+            # Reset source-specific widgets; re-enable per branch below.
+            topo_button.display = (event.value == "topology")
+            # Node count is derived from the topology selection, so lock it there.
+            self.query_one("#numnodes", Input).disabled = (event.value == "topology")
+
             if event.value == "file":
-                node_file_input.visible= True
-                data_table.visible= False
+                node_file_input.visible = True
+                data_table.visible = False
+            elif event.value == "topology":
+                # Selection happens in the modal map; keep the table for results.
+                node_file_input.visible = False
+                data_table.visible = True
+                if self.selected_nodes:
+                    for node in self.selected_nodes:
+                        data_table.add_row(node)
+                else:
+                    data_table.add_row("Open the topology map to select nodes.")
             else:
                 data_table.visible= True
 
@@ -179,4 +221,63 @@ class BenchmarkOptions(VerticalScroll):
 
                 node_file_input.visible= False
                 node_file_input.value = ""
+
+    # --- Topology-aware node selection ------------------------------------
+    @on(Button.Pressed, "#open_topology")
+    def _open_topology_map(self) -> None:
+        """Load the preset's topology file and open the graphical selector."""
+        topo_path = self._resolve_topology_path()
+        if not topo_path:
+            self.app.notify(
+                "No topology file configured for this preset. "
+                "Set a 'topology' path in presets.json.",
+                severity="warning",
+            )
+            return
+        if not os.path.exists(topo_path):
+            self.app.notify(f"Topology file not found: {topo_path}", severity="error")
+            return
+        try:
+            topology = Topology.load(topo_path)
+        except Exception as e:  # noqa: BLE001
+            self.app.notify(f"Failed to load topology: {e}", severity="error")
+            return
+
+        self.app.push_screen(
+            TopologyMapScreen(topology, preselected=set(self.selected_nodes)),
+            self._apply_topology_selection,
+        )
+
+    def _apply_topology_selection(self, selected) -> None:
+        """Callback from the topology modal with the chosen hostnames."""
+        if selected is None:  # cancelled
+            return
+        self.selected_nodes = list(selected)
+
+        data_table = self.query_one("#node_table", DataTable)
+        data_table.clear()
+        if self.selected_nodes:
+            for node in self.selected_nodes:
+                data_table.add_row(node)
+        else:
+            data_table.add_row("Open the topology map to select nodes.")
+
+        # Keep the requested node count in sync with the explicit selection.
+        self.query_one("#numnodes", Input).value = str(len(self.selected_nodes))
+        self.app.notify(f"Selected {len(self.selected_nodes)} node(s) from topology.")
+
+    def _resolve_topology_path(self) -> str:
+        """Topology file for the active preset (preset value overrides _common)."""
+        try:
+            preset_name = self.app_ref.env_container.current_preset_name
+        except Exception:
+            preset_name = "local"
+        try:
+            with open("presets.json", "r") as f:
+                presets = json.load(f)
+        except Exception:
+            return ""
+        common = presets.get("_common", {}).get("topology", "")
+        preset = presets.get(preset_name, {}).get("topology", "")
+        return preset or common
 
