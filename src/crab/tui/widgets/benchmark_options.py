@@ -26,8 +26,7 @@ class BenchmarkOptions(VerticalScroll):
         data_table.add_column("Available Nodes")
 
         # Topology controls are only relevant for the "topology" source.
-        self.query_one("#open_topology", Button).display = False
-        self.query_one("#topology_file_row").display = False
+        self.query_one("#topology_controls").display = False
 
 
     def compose(self):
@@ -44,11 +43,14 @@ class BenchmarkOptions(VerticalScroll):
                 ("Topology Map", "topology")
             ], value="auto", id="nodes", classes="option-input")
             yield Input(placeholder="Path to node list file", id="node_file", classes="option-input")
-            with Horizontal(id="topology_file_row"):
-                yield Input(placeholder="Path to topology JSON file", id="topology_file")
-                yield Button("Browse…", id="browse_topology")
-            yield Button("🗺  Open Topology Map", id="open_topology", variant="primary")
             yield DataTable(id="node_table", classes="datatable")
+
+        # --- Topology selection controls (own row so buttons stay visible) ---
+        with Container(id="topology_controls", classes="option-group"):
+            yield Label("Topology File:", classes="option-label")
+            yield Input(placeholder="Path to topology JSON file", id="topology_file")
+            yield Button("Browse…", id="browse_topology")
+            yield Button("🗺 Open Map", id="open_topology", variant="primary")
 
         # --- Argomenti Opzionali ---
         with Container(classes="option-group"):
@@ -181,14 +183,12 @@ class BenchmarkOptions(VerticalScroll):
         """Gestisce i cambiamenti nelle selezioni."""
         if event.select.id == "nodes":
             node_file_input = self.query_one("#node_file", Input)
-            topo_button = self.query_one("#open_topology", Button)
             data_table = self.query_one("#node_table", DataTable)
             data_table.clear()
 
             # Reset source-specific widgets; re-enable per branch below.
             is_topology = (event.value == "topology")
-            topo_button.display = is_topology
-            self.query_one("#topology_file_row").display = is_topology
+            self.query_one("#topology_controls").display = is_topology
             # Node count is derived from the topology selection, so lock it there.
             self.query_one("#numnodes", Input).disabled = is_topology
 

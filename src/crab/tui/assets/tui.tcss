@@ -463,16 +463,13 @@ Select.option-input {
     margin: 1 0;
 }
 
-#topology_file_row {
-    width: auto;
-    height: auto;
-    margin: 1 0 0 0;
-}
-
+/* Topology controls share one row; the path field flexes so both buttons
+   stay visible regardless of terminal width. */
 #topology_file {
-    width: 60;
+    width: 1fr;
+    margin: 1 0;
 }
 
-#browse_topology {
-    margin-left: 1;
+#browse_topology, #open_topology {
+    margin: 1 0 1 1;
 }
