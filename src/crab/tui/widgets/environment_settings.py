@@ -121,6 +121,18 @@ class EnvironmentSettings(Container):
             "header": header_list
         }
 
+    # Metodo pubblico chiamato da App.py per ottenere lo stato completo
+    # (env + sbatch + header), così le direttive SBATCH/header inserite
+    # nella UI vengono propagate al config e finiscono nel job file.
+    def get_full_state(self) -> dict:
+        return self._gather_current_state()
+
+    # Metodo pubblico chiamato da App.py al caricamento di una config,
+    # per ripopolare le aree SBATCH/Header con i valori salvati.
+    def set_sbatch_header(self, sbatch_list: list, header_list: list) -> None:
+        self.query_one("#sbatch_area", TextArea).text = "\n".join(sbatch_list or [])
+        self.query_one("#header_area", TextArea).text = "\n".join(header_list or [])
+
     # Metodo pubblico chiamato da App.py per ottenere la config completa
     @property
     def current_env_dict(self) -> dict:

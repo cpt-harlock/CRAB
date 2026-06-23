@@ -322,6 +322,13 @@ class ExperimentRunner:
         def load_module(path):
             name = pathlib.Path(path).stem
             spec = importlib.util.spec_from_file_location(name, path)
+            if spec is None or spec.loader is None:
+                raise ImportError(
+                    f"'{path}' is not a loadable Python wrapper. "
+                    f"Point the application path to a wrapper .py "
+                    f"(e.g. in {os.environ.get('CRAB_WRAPPERS_PATH', 'wrappers')}), "
+                    f"not the benchmark binary."
+                )
             mod = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(mod)
             return mod
@@ -354,11 +361,12 @@ class ExperimentRunner:
             app_instance = mod_app.app(idx_counter, collect, args)
             
             # Timing & Partition Metadata
-            start_val = str(details.get("start", "0"))
+            # Un valore vuoto/whitespace (default della TUI) equivale a "start at 0".
+            start_val = str(details.get("start", "0")).strip() or "0"
             manual_partition = details.get("partition")
             app_instance.partition_id = int(manual_partition) if manual_partition is not None else (0 if collect else 1)
             app_instance.start_string = start_val
-            app_instance.config_end = details.get("end", "")
+            app_instance.config_end = str(details.get("end", "")).strip()
             
             self.apps.append(app_instance)
             idx_counter += 1

@@ -75,10 +75,20 @@ class ApplicationForm(Vertical):
                 except Exception:
                     pass
 
+    def _wrappers_dir(self) -> str:
+        """Default browse location: the CRAB wrappers directory, if it exists."""
+        raw = os.environ.get("CRAB_WRAPPERS_PATH", "")
+        if raw:
+            raw = raw.replace("__CWD__", os.getcwd())
+            candidate = os.path.expandvars(os.path.expanduser(raw))
+        else:
+            candidate = os.path.join(os.getcwd(), "wrappers")
+        return candidate if os.path.isdir(candidate) else os.getcwd()
+
     @on(Button.Pressed, "#browse-path")
     @work
     async def browse_path(self):
-        file_path = await self.app_ref.push_screen_wait(FileOpen())
+        file_path = await self.app_ref.push_screen_wait(FileOpen(location=self._wrappers_dir()))
         if not file_path:
             self.notify("File selection cancelled")
             return

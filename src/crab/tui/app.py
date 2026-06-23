@@ -118,6 +118,11 @@ class BenchmarkApp(App):
         global_options_state = self.benchmark_container.get_state()
         applications_state = self.applications_container.get_state()
 
+        # Include SBATCH directives / header commands from the Environment tab,
+        # stored under global_options to match the runtime config structure.
+        env_state = self.env_container.get_full_state()
+        global_options_state["system_sbatch"] = env_state.get("sbatch", [])
+        global_options_state["system_header"] = env_state.get("header", [])
 
         # 2 Build the complete data structure
         data_to_save = {
@@ -167,8 +172,15 @@ class BenchmarkApp(App):
                 return
 
             # Load data into the respective containers
-            self.benchmark_container.set_state(data_loaded["global_options"])
+            loaded_global = data_loaded["global_options"]
+            self.benchmark_container.set_state(loaded_global)
             await self.applications_container.set_state(data_loaded["applications"])
+
+            # Restore SBATCH directives / header commands into the Environment tab
+            self.env_container.set_sbatch_header(
+                loaded_global.get("system_sbatch", []),
+                loaded_global.get("system_header", []),
+            )
 
             self.notify(f"Configuration loaded from {os.path.basename(file_path_str)}", severity="information")
 
@@ -194,15 +206,22 @@ class BenchmarkApp(App):
         self.save_benchmark_state()
         global_options_state = self.benchmark_container.get_state()
         applications_state = self.applications_container.get_state()
-        
+
+        # 3. Raccogli le impostazioni dell'ambiente dalla TUI (env + sbatch + header)
+        env_state = self.env_container.get_full_state()
+        selected_preset = self.env_container.current_preset_name
+
+        # Inietta le direttive SBATCH e i comandi di header nelle global_options,
+        # come fa l'orchestrator CLI, così l'Engine le include nel job file.
+        global_options_state["system_sbatch"] = env_state.get("sbatch", [])
+        global_options_state["system_header"] = env_state.get("header", [])
+
         benchmark_config = {
             "global_options": global_options_state,
             "applications": applications_state
         }
 
-        # 3. Raccogli le impostazioni dell'ambiente dalla TUI
-        tui_settings = self.current_environment_settings.copy()
-        selected_preset = self.env_container.current_preset_name
+        tui_settings = env_state.get("env", {}).copy()
 
         # 4. Usa il controller per eseguire il benchmark in un thread
         self.controller.run_in_thread(

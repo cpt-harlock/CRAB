@@ -4,8 +4,15 @@ import sys
 # Aggiunge la directory 'src' al path di Python per trovare il pacchetto 'crab'
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), 'src')))
 
-from crab.tui.app import BenchmarkApp
-
 if __name__ == "__main__":
-    app = BenchmarkApp()
-    app.run()
+    # Quando il job SLURM viene lanciato, l'Engine ricostruisce il comando del worker
+    # come "<python> <sys.argv[0]> --worker --workdir ...". Se la TUI è stata l'entry
+    # point, sys.argv[0] è questo file: in worker mode NON dobbiamo riavviare la TUI
+    # (che renderebbe codici ANSI nei log), ma eseguire la logica del worker.
+    if "--worker" in sys.argv:
+        from crab.cli.orchestrator import run_from_cli
+        run_from_cli()
+    else:
+        from crab.tui.app import BenchmarkApp
+        app = BenchmarkApp()
+        app.run()
