@@ -15,6 +15,9 @@ python tui.py
 
 # Plot results
 python blink_plotter.py
+
+# Analyze tournament_nb per-node results (bandwidth/latency + topology distance)
+python tournament_analyzer.py <run_dir|exp_dir> --topology topologies/leonardo.json --json
 ```
 
 The preset can also be set via a `.env` file (single line: preset name) or `CRAB_PRESET` env var. Default is `local`.
@@ -28,6 +31,7 @@ src/crab/core/engine.py       # Core: NodeAllocator, ExperimentRunner, Engine
 src/crab/core/models.py       # AppConfig / BenchmarkState dataclasses (used by TUI)
 src/crab/core/wl_manager/     # Workload manager backends: slurm.py, mpi.py
 src/crab/topology/            # ibnetdiscover parser → neutral topology JSON (model.py, parser.py)
+src/crab/analysis/            # tournament_nb result analyzer (parse/params/metrics/topo/outliers/report_*)
 wrappers/                     # One .py file per benchmark, all extend wrappers/base.py
 benchmarks/blink/             # C/C++ MPI microbenchmark sources + pre-built bin/
 tests/                        # Standalone-runnable tests (no pytest dep) + fixtures/
@@ -155,6 +159,25 @@ Results land under `data/<CRAB_SYSTEM>/<name>_<timestamp>/`:
 - `slurm_output.log`, `slurm_error.log`
 - `<exp_id>/data_app_<id>.csv` — collected metrics
 - `<exp_id>/error_app_<id>.log` — per-app error logs on non-zero exit
+
+## Tournament result analyzer (`tournament_analyzer.py`)
+
+Analyzes the **per-node CSV dumps** written by `tournament_nb.c`'s
+`write_node_results()` (`<exp_dir>/node_<host>_rank<r>.csv`, columns
+`node,rank,peer_node,peer_rank,sample,duration_s`, `=`-fenced per round).
+Backed by `src/crab/analysis/`: `parse` (format-tolerant: columns by name,
+blocks by peer-change) → `params` (msg_size/window/granularity from CLI →
+`stdout_app_*.log` header → `config.json` args → C defaults) → `metrics`
+(bandwidth + per-iteration latency, robust stats; pairings merge both endpoints)
+→ `topo` (wraps `crab.topology.model`; normalizes FQDN→short host) → `outliers`
+→ `report_text`/`report_plot`.
+
+Reports per-node / per-round / overall **bandwidth** (full-duplex aggregate
+decimal GB/s; unidirectional = half) and **latency** (`duration/(window*gran)`;
+a true latency only when `window==1`), plus per-round **topology distance** mix
+(same_switch / same_cell / cross_cell via `Topology.locality()`) and flagged
+under-performing nodes. Writes `report.txt`, `summary.json` (`--json`), and v1
+figures to `<exp_dir>/analysis/`. Design + roadmap: `PLAN_RESULT_ANALYZER.md`.
 
 ## Dependencies
 
