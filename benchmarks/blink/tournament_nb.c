@@ -198,13 +198,21 @@ static void write_node_results(void) {
     }
 
     fprintf(f, "node,rank,peer_node,peer_rank,sample,duration_s\n");
+    int prev_peer = -1;
     for (i = 0; i < num_samples; i++) {
         int peer = tmp_partner[i];
+        /*samples are chronological, so a peer change marks a new tournament
+          round (a new "run" against a different partner): fence the blocks
+          with a line of '=' so downstream processing can split on them*/
+        if (i > 0 && peer != prev_peer) {
+            fprintf(f, "========================================\n");
+        }
         const char *peer_name = (peer >= 0 && peer < w_size)
                                     ? &all_names[(size_t)peer * MPI_MAX_PROCESSOR_NAME]
                                     : "unknown";
         fprintf(f, "%s,%d,%s,%d,%d,%.9f\n",
                 proc_name, my_rank, peer_name, peer, i, tmp_buf[i]);
+        prev_peer = peer;
     }
     fclose(f);
 
