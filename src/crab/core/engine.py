@@ -788,8 +788,22 @@ class Engine:
             f.write(f"\n{cmd}\n")
 
         self.log(f"Submitting: sbatch {script_path}")
-        out = subprocess.check_output(['sbatch', script_path], text=True)
-        self.log(out.strip())
+        # Capture both streams: sbatch prints submission errors (bad partition,
+        # qos, account, ...) to stderr, which check_output would discard. Surface
+        # them in the runner log instead of failing with an opaque exit code.
+        result = subprocess.run(['sbatch', script_path], text=True,
+                                capture_output=True)
+        if result.returncode != 0:
+            self.log(f"[bold red]Job submission failed: sbatch exited "
+                     f"{result.returncode}.[/]")
+            err = (result.stderr or "").strip()
+            out = (result.stdout or "").strip()
+            if err:
+                self.log(err)
+            if out:
+                self.log(out)
+            raise RuntimeError("sbatch submission failed — see the log above.")
+        self.log(result.stdout.strip())
 
     def _run_worker(self, config: Dict[str, Any], environment: Dict[str, Any], output_dir: str):
         # ... (Il worker rimane identico a prima) ...
