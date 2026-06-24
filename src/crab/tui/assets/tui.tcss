@@ -383,6 +383,9 @@ Select.option-input {
 #topo-cells {
     width: 100%;
     height: 1fr;
+    /* HorizontalScroll only shows the horizontal slider by default; also
+       enable the vertical one so tall cell columns can be scrolled. */
+    overflow-y: auto;
 }
 
 .cell-box {
