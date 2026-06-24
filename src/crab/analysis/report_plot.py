@@ -9,6 +9,7 @@ Produces, into ``outdir``:
   6. bandwidth & latency CDFs (slow region shaded)
   7. per-round bandwidth box plot
   8. overview.png — 2x2 summary of the above
+  9. (opt, --topo-graph) topology node-link diagram
 """
 
 from __future__ import annotations
@@ -31,7 +32,7 @@ def _short(node: str) -> str:
 
 
 def generate_plots(an: Analysis, outliers: OutlierResult, outdir: str,
-                   show: bool = False) -> List[str]:
+                   show: bool = False, topo_graph: bool = False) -> List[str]:
     import matplotlib
     if not show:
         matplotlib.use("Agg")
@@ -145,9 +146,105 @@ def generate_plots(an: Analysis, outliers: OutlierResult, outdir: str,
     if p:
         paths.append(p)
 
+    # 9. (opt) topology node-link diagram ---------------------------------
+    if topo_graph:
+        p = _plot_topo_graph(an, outliers, outdir, plt)
+        if p:
+            paths.append(p)
+
     if show:
         plt.show()
     return paths
+
+
+def _plot_topo_graph(an: Analysis, outliers, outdir: str, plt) -> str:
+    """Node-link diagram: nodes grouped by cell/switch, colored by bandwidth,
+    edges = pairings colored by topology distance. Gated by --topo-graph."""
+    from matplotlib.lines import Line2D
+
+    topo = an.resolver.topology
+    nodes = [ns.node for ns in an.nodes]
+    if len(nodes) < 2:
+        return ""
+    flagged = {f.node for f in outliers.flagged}
+    bw = {ns.node: ns.median_bw_gbs for ns in an.nodes}
+
+    # group by (cell, switch) when topology is known, else one group
+    groups: dict = {}
+    for node in nodes:
+        short = _short(node)
+        cell = sw = "unknown"
+        if topo is not None and short in topo.nodes:
+            n = topo.nodes[short]
+            cell = n.cell or "unknown"
+            sw = n.switches[0] if n.switches else "unknown"
+        groups.setdefault((cell, sw), []).append(node)
+
+    gkeys = sorted(groups)
+    ncols = int(np.ceil(np.sqrt(len(gkeys))))
+    spacing = 3.0
+    pos: dict = {}
+    anchors: dict = {}
+    for idx, gk in enumerate(gkeys):
+        gx = (idx % ncols) * spacing
+        gy = -(idx // ncols) * spacing
+        anchors[gk] = (gx, gy)
+        members = groups[gk]
+        m = len(members)
+        if m == 1:
+            pos[members[0]] = (gx, gy)
+        else:
+            r = 0.85
+            for j, node in enumerate(members):
+                ang = 2 * np.pi * j / m
+                pos[node] = (gx + r * np.cos(ang), gy + r * np.sin(ang))
+
+    fig, ax = plt.subplots(figsize=(10, 8))
+
+    present_loc = set()
+    for pr in an.pairings:
+        if pr.node_a not in pos or pr.node_b not in pos:
+            continue
+        x = [pos[pr.node_a][0], pos[pr.node_b][0]]
+        y = [pos[pr.node_a][1], pos[pr.node_b][1]]
+        ax.plot(x, y, color=_LOC_COLOR.get(pr.label, "#7f7f7f"), lw=1.4,
+                alpha=0.55, zorder=1)
+        present_loc.add(pr.label)
+
+    xs = [pos[n][0] for n in nodes]
+    ys = [pos[n][1] for n in nodes]
+    vals = [bw[n] for n in nodes]
+    edgecolors = ["#d62728" if n in flagged else "k" for n in nodes]
+    lws = [2.5 if n in flagged else 0.8 for n in nodes]
+    sc = ax.scatter(xs, ys, c=vals, cmap="viridis", s=520, edgecolors=edgecolors,
+                    linewidths=lws, zorder=2)
+    fig.colorbar(sc, ax=ax, label="median bandwidth (GB/s, full-duplex)")
+    for n in nodes:
+        x, y = pos[n]
+        ax.annotate(_short(n), (x, y - 0.32), ha="center", va="top", fontsize=7,
+                    color="k", zorder=3)
+
+    for (cell, sw), (gx, gy) in anchors.items():
+        tag = cell if sw == "unknown" else f"{cell}·{sw[-4:]}"
+        ax.annotate(tag, (gx, gy + 1.4), ha="center", fontsize=7, color="#444",
+                    style="italic")
+
+    handles = [Line2D([0], [0], color=_LOC_COLOR.get(l, "#7f7f7f"), lw=2, label=l)
+               for l in sorted(present_loc)]
+    if handles:
+        ax.legend(handles=handles, title="edge = pairing distance", fontsize=8,
+                  loc="upper left")
+
+    ax.set_title("Topology node-link graph "
+                 "(node color = bandwidth, red ring = slow)")
+    ax.set_aspect("equal")
+    ax.axis("off")
+    ax.margins(0.15)
+    fig.tight_layout()
+    out = os.path.join(outdir, "topo_graph.png")
+    fig.savefig(out, dpi=120)
+    plt.close(fig)
+    return out
 
 
 def _plot_overview(an: Analysis, outliers, outdir: str, plt) -> str:

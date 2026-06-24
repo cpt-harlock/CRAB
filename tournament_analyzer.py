@@ -80,7 +80,8 @@ def analyze_exp_dir(exp_dir: str, args) -> int:
 
     if not args.no_plots:
         try:
-            paths = report_plot.generate_plots(an, ol, outdir, show=args.show)
+            paths = report_plot.generate_plots(an, ol, outdir, show=args.show,
+                                               topo_graph=args.topo_graph)
             print(f"\n[plots] wrote {len(paths)} figure(s) to {outdir}",
                   file=sys.stderr)
         except Exception as exc:  # noqa: BLE001
@@ -101,6 +102,8 @@ def main(argv=None) -> int:
     ap.add_argument("--json", action="store_true", help="also write summary.json")
     ap.add_argument("--show", action="store_true", help="display plots interactively")
     ap.add_argument("--no-plots", action="store_true", help="skip figures")
+    ap.add_argument("--topo-graph", action="store_true", dest="topo_graph",
+                    help="also draw the topology node-link diagram")
     ap.add_argument("--slow-k", type=float, default=3.0,
                     help="robust z-score threshold (default 3.0)")
     ap.add_argument("--slow-frac", type=float, default=0.7,
