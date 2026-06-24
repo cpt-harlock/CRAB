@@ -1,10 +1,12 @@
-"""Graphical report (v1 core figures) for the tournament analysis.
+"""Graphical report for the tournament analysis.
 
 Produces, into ``outdir``:
   1. per-node bandwidth bar chart (flagged nodes in red, global median line)
   2. per-node latency bar chart
   3. bandwidth-vs-topology-distance box plot
   4. per-round topology-mix stacked bar with round median bandwidth overlaid
+  5. pairwise bandwidth heatmap (node x peer, locality-colored borders)
+  6. bandwidth & latency CDFs (slow region shaded)
 """
 
 from __future__ import annotations
@@ -121,6 +123,132 @@ def generate_plots(an: Analysis, outliers: OutlierResult, outdir: str,
         paths.append(p)
         plt.close(fig)
 
+    # 5. pairwise bandwidth heatmap ---------------------------------------
+    p = _plot_heatmap(an, outdir, plt)
+    if p:
+        paths.append(p)
+
+    # 6. bandwidth & latency CDFs -----------------------------------------
+    p = _plot_cdf(an, outliers, outdir, plt)
+    if p:
+        paths.append(p)
+
     if show:
         plt.show()
     return paths
+
+
+def _node_order(an: Analysis) -> list:
+    """Order nodes by (cell, switch, name) so heatmap quadrants track topology."""
+    topo = an.resolver.topology
+
+    def key(node: str):
+        short = _short(node)
+        cell = sw = ""
+        if topo is not None and short in topo.nodes:
+            n = topo.nodes[short]
+            cell = n.cell or ""
+            sw = n.switches[0] if n.switches else ""
+        return (cell, sw, short)
+
+    return sorted((ns.node for ns in an.nodes), key=key)
+
+
+def _plot_heatmap(an: Analysis, outdir: str, plt) -> str:
+    from matplotlib.patches import Rectangle
+
+    order = _node_order(an)
+    if len(order) < 2:
+        return ""
+    idx = {node: i for i, node in enumerate(order)}
+    n = len(order)
+    mat = np.full((n, n), np.nan)
+    loc_at = {}
+    for pr in an.pairings:
+        if pr.node_a not in idx or pr.node_b not in idx:
+            continue
+        med = float(np.median(bandwidth_gbs(pr.durations, an.params)))
+        i, j = idx[pr.node_a], idx[pr.node_b]
+        mat[i, j] = mat[j, i] = med
+        loc_at[(i, j)] = loc_at[(j, i)] = pr.label
+
+    fig, ax = plt.subplots(figsize=(max(5, n * 0.7), max(4.5, n * 0.6)))
+    masked = np.ma.masked_invalid(mat)
+    cmap = plt.get_cmap("viridis").copy()
+    cmap.set_bad("lightgray")
+    im = ax.imshow(masked, cmap=cmap, aspect="equal")
+    fig.colorbar(im, ax=ax, label="median bandwidth (GB/s, full-duplex)")
+
+    labels = [_short(x) for x in order]
+    ax.set_xticks(range(n), labels, rotation=90, fontsize=8)
+    ax.set_yticks(range(n), labels, fontsize=8)
+    ax.set_title("Pairwise bandwidth (border = topology distance)")
+
+    for (i, j), label in loc_at.items():
+        ax.add_patch(Rectangle((j - 0.5, i - 0.5), 1, 1, fill=False,
+                               edgecolor=_LOC_COLOR.get(label, "#7f7f7f"), lw=2))
+    for i in range(n):
+        for j in range(n):
+            if not np.isnan(mat[i, j]):
+                ax.text(j, i, f"{mat[i, j]:.0f}", ha="center", va="center",
+                        color="w", fontsize=7)
+    # legend for the locality border colors actually present
+    present = sorted(set(loc_at.values()))
+    handles = [Rectangle((0, 0), 1, 1, fill=False, edgecolor=_LOC_COLOR.get(l, "#7f7f7f"),
+                         lw=2, label=l) for l in present]
+    if handles:
+        ax.legend(handles=handles, loc="upper left", bbox_to_anchor=(1.25, 1.0),
+                  fontsize=8, title="distance")
+    fig.tight_layout()
+    out = os.path.join(outdir, "pairwise_heatmap.png")
+    fig.savefig(out, dpi=120)
+    plt.close(fig)
+    return out
+
+
+def _plot_cdf(an: Analysis, outliers, outdir: str, plt) -> str:
+    bw = np.concatenate([bandwidth_gbs(p.durations, an.params)
+                         for p in an.pairings]) if an.pairings else np.array([])
+    lat = np.concatenate([(p.durations / (an.params.window * an.params.granularity))
+                          for p in an.pairings]) if an.pairings else np.array([])
+    bw = bw[np.isfinite(bw)]
+    lat = lat[np.isfinite(lat)]
+    if bw.size == 0:
+        return ""
+
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(11, 4.5))
+
+    def cdf(ax, vals, xlabel):
+        a = np.sort(vals)
+        y = np.arange(1, a.size + 1) / a.size
+        ax.plot(a, y, lw=1.8)
+        ax.set_xlabel(xlabel)
+        ax.set_ylabel("cumulative fraction")
+        ax.grid(True, alpha=0.3)
+
+    cdf(ax1, bw, "bandwidth (GB/s, full-duplex)")
+    ax1.set_title("Bandwidth CDF")
+    if np.isfinite(outliers.median):
+        ax1.axvline(outliers.median, ls="--", color="k", lw=1,
+                    label=f"node median {outliers.median:.1f}")
+    if np.isfinite(outliers.slow_threshold):
+        # shade the "slow" region = bandwidth below the threshold; empty (no
+        # visible band) when the threshold sits left of all data
+        lo = min(float(bw.min()), outliers.slow_threshold)
+        ax1.axvspan(lo, outliers.slow_threshold, color="#d62728", alpha=0.12)
+        ax1.axvline(outliers.slow_threshold, ls=":", color="#d62728", lw=1.2,
+                    label=f"slow < {outliers.slow_threshold:.1f}")
+    ax1.legend(fontsize=8)
+
+    cdf(ax2, lat * 1e6, "per-iteration latency (us)")
+    suffix = " (amortized)" if an.params.window != 1 else ""
+    ax2.set_title("Latency CDF" + suffix)
+    ax2.axvline(float(np.median(lat * 1e6)), ls="--", color="k", lw=1,
+                label=f"median {np.median(lat) * 1e6:.1f} us")
+    ax2.legend(fontsize=8)
+
+    fig.tight_layout()
+    out = os.path.join(outdir, "cdf_bandwidth_latency.png")
+    fig.savefig(out, dpi=120)
+    plt.close(fig)
+    return out

@@ -31,6 +31,7 @@ class Flagged:
 class OutlierResult:
     median: float
     mad: float
+    slow_threshold: float = float("nan")   # absolute cutoff = frac * median
     flagged: List[Flagged] = field(default_factory=list)
     method: str = ""
     low_confidence: bool = False
@@ -64,6 +65,7 @@ def detect(node_bw_median: Dict[str, float], k: float = 3.0,
         res.method = f"robust z-score (k={k}); abs frac*median (frac={frac}) as backup"
 
     thr_abs = frac * med
+    res.slow_threshold = thr_abs
     sigma = mad * MAD_TO_STD
 
     for node, v in zip(nodes, vals):
