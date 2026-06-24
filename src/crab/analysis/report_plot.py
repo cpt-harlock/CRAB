@@ -8,6 +8,7 @@ Produces, into ``outdir``:
   5. pairwise bandwidth heatmap (node x peer, locality-colored borders)
   6. bandwidth & latency CDFs (slow region shaded)
   7. per-round bandwidth box plot
+  8. overview.png — 2x2 summary of the above
 """
 
 from __future__ import annotations
@@ -139,9 +140,102 @@ def generate_plots(an: Analysis, outliers: OutlierResult, outdir: str,
     if p:
         paths.append(p)
 
+    # 8. one-glance overview ----------------------------------------------
+    p = _plot_overview(an, outliers, outdir, plt)
+    if p:
+        paths.append(p)
+
     if show:
         plt.show()
     return paths
+
+
+def _plot_overview(an: Analysis, outliers, outdir: str, plt) -> str:
+    """A 2x2 summary: per-node BW, BW-by-distance, per-round mix, BW CDF."""
+    fig, axs = plt.subplots(2, 2, figsize=(13, 9))
+    flagged = {f.node for f in outliers.flagged}
+
+    # A: per-node bandwidth
+    ax = axs[0, 0]
+    nodes_sorted = sorted(an.nodes, key=lambda x: x.median_bw_gbs)
+    labels = [_short(ns.node) for ns in nodes_sorted]
+    colors = ["#d62728" if ns.node in flagged else "#1f77b4" for ns in nodes_sorted]
+    ax.bar(labels, [ns.median_bw_gbs for ns in nodes_sorted], color=colors)
+    gm = float(np.median([ns.median_bw_gbs for ns in an.nodes]))
+    ax.axhline(gm, ls="--", color="k", lw=1, label=f"median {gm:.1f}")
+    ax.set_ylabel("median BW (GB/s, FD)")
+    ax.set_title("Per-node bandwidth (red = slow)")
+    ax.tick_params(axis="x", rotation=90, labelsize=7)
+    ax.legend(fontsize=8)
+
+    # B: bandwidth by topology distance
+    ax = axs[0, 1]
+    by_loc = {lab: [] for lab in _LOC_ORDER}
+    for pr in an.pairings:
+        by_loc[pr.label].extend(bandwidth_gbs(pr.durations, an.params).tolist())
+    present = [lab for lab in _LOC_ORDER if by_loc[lab]]
+    if present:
+        bp = ax.boxplot([by_loc[l] for l in present], tick_labels=present,
+                        patch_artist=True, showfliers=False)
+        for patch, lab in zip(bp["boxes"], present):
+            patch.set_facecolor(_LOC_COLOR[lab])
+            patch.set_alpha(0.6)
+    ax.set_ylabel("BW (GB/s, FD)")
+    ax.set_title("Bandwidth vs topology distance")
+
+    # C: per-round topology mix + median bandwidth
+    ax = axs[1, 0]
+    if an.rounds:
+        rounds = [r.round_index for r in an.rounds]
+        bottom = np.zeros(len(an.rounds))
+        for lab in _LOC_ORDER:
+            h = np.array([r.mix.get(lab, 0) for r in an.rounds], dtype=float)
+            if h.sum() == 0:
+                continue
+            ax.bar(rounds, h, bottom=bottom, label=lab, color=_LOC_COLOR[lab],
+                   alpha=0.8)
+            bottom += h
+        ax.set_xlabel("round")
+        ax.set_ylabel("pairings by distance")
+        ax.set_xticks(rounds)
+        ax.legend(fontsize=7, loc="upper left")
+        ax2 = ax.twinx()
+        ax2.plot(rounds, [r.bw.median for r in an.rounds], "ko-", lw=1.3)
+        ax2.set_ylabel("median BW (GB/s)")
+    ax.set_title("Per-round topology mix & bandwidth")
+
+    # D: bandwidth CDF
+    ax = axs[1, 1]
+    bw = np.concatenate([bandwidth_gbs(p.durations, an.params)
+                         for p in an.pairings]) if an.pairings else np.array([])
+    bw = bw[np.isfinite(bw)]
+    if bw.size:
+        a = np.sort(bw)
+        ax.plot(a, np.arange(1, a.size + 1) / a.size, lw=1.8)
+        if np.isfinite(outliers.median):
+            ax.axvline(outliers.median, ls="--", color="k", lw=1,
+                       label=f"median {outliers.median:.1f}")
+        if np.isfinite(outliers.slow_threshold):
+            lo = min(float(bw.min()), outliers.slow_threshold)
+            ax.axvspan(lo, outliers.slow_threshold, color="#d62728", alpha=0.12)
+            ax.axvline(outliers.slow_threshold, ls=":", color="#d62728", lw=1.2,
+                       label=f"slow < {outliers.slow_threshold:.1f}")
+        ax.legend(fontsize=8)
+    ax.set_xlabel("BW (GB/s, FD)")
+    ax.set_ylabel("cumulative fraction")
+    ax.grid(True, alpha=0.3)
+    ax.set_title("Bandwidth CDF")
+
+    p = an.params
+    fig.suptitle(f"{os.path.basename(an.dataset.exp_dir.rstrip(os.sep))}  |  "
+                 f"{len(an.dataset.nodes)} nodes, {an.dataset.n_rounds} rounds  |  "
+                 f"msg={p.msg_size} window={p.window} gran={p.granularity}",
+                 fontsize=11)
+    fig.tight_layout(rect=(0, 0, 1, 0.97))
+    out = os.path.join(outdir, "overview.png")
+    fig.savefig(out, dpi=120)
+    plt.close(fig)
+    return out
 
 
 def _plot_round_box(an: Analysis, outdir: str, plt) -> str:
