@@ -145,7 +145,7 @@
             "CRAB_MPIRUN_MAP_BY_NODE_FLAG": "--map-by node",
             "CRAB_MPIRUN_HOSTNAMES_FLAG": "-H",
             "CRAB_PINNING_FLAGS": "",
-            "CRAB_MPIRUN_ADDITIONAL_FLAGS": "",
+            "CRAB_MPIRUN_ADDITIONAL_FLAGS": "--mca orte_tmpdir_base /tmp",
             "CRAB_NG_CONFIGURE_FLAGS": "HRT_ARCH=6",
             "CRAB_WL_MANAGER": "mpi",
             "CRAB_AMG_PATH": "",

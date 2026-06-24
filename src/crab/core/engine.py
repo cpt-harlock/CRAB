@@ -406,7 +406,12 @@ class ExperimentRunner:
     def execute(self):
         """Main execution loop (Setup -> Run -> Wait -> Converge)."""
         self.log(f"[{self.name}] Execution started.")
-        
+
+        # Esponiamo la directory dati dell'esperimento ai binari lanciati, così
+        # un benchmark può scrivere file per-nodo lì (es. tournament_nb). Path
+        # assoluto: i rank condividono il filesystem ma non hanno la CWD su exp_dir.
+        os.environ["CRAB_NODE_RESULTS_DIR"] = os.path.abspath(self.exp_dir)
+
         # Params
         min_runs = int(self.global_opts.get('minruns', 10))
         max_runs = int(self.global_opts.get('maxruns', 20))
@@ -517,6 +522,18 @@ class ExperimentRunner:
                                     except Exception as e:
                                         print(f"[CRAB WARNING] Could not write error log file: {e}", file=sys.stderr)
                                 # --- FINE MODIFICA ---
+
+                                # --- Dump raw stdout on success (solo se stiamo raccogliendo) ---
+                                # Utile per ispezionare l'output grezzo del benchmark
+                                # (quello che write_results() stampa) senza doverlo parsare.
+                                elif self.apps[aid].collect_flag and out:
+                                    decoded_out = out.decode('utf-8', errors='replace') if isinstance(out, bytes) else out
+                                    try:
+                                        stdout_path = os.path.join(self.exp_dir, f"stdout_app_{aid}.log")
+                                        with open(stdout_path, "a") as f:
+                                            f.write(f"=== Run {runs + 1} ===\n{decoded_out}\n")
+                                    except Exception as e:
+                                        print(f"[CRAB WARNING] Could not write stdout log file: {e}", file=sys.stderr)
 
                             except Exception as e:
                                 self.log(f"[INTERNAL ERROR] Failed reading output for app {aid}: {e}")
