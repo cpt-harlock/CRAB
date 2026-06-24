@@ -27,6 +27,8 @@ class BenchmarkOptions(VerticalScroll):
 
         # Topology controls are only relevant for the "topology" source.
         self.query_one("#topology_controls").display = False
+        # The free-text node list is only relevant for the "list" source.
+        self.query_one("#node_list", Input).display = False
 
 
     def compose(self):
@@ -40,9 +42,13 @@ class BenchmarkOptions(VerticalScroll):
                 ("Mixed Nodes", "mixed"),
                 ("Idle Nodes", "idle"),
                 ("From File", "file"),
+                ("Node List", "list"),
                 ("Topology Map", "topology")
             ], value="auto", id="nodes", classes="option-input")
             yield Input(placeholder="Path to node list file", id="node_file", classes="option-input")
+            yield Input(
+                placeholder="Comma/space-separated hostnames, e.g. lrdn0001,lrdn0002,lrdn0003",
+                id="node_list", classes="option-input")
             yield DataTable(id="node_table", classes="datatable")
 
         # --- Topology selection controls (own row so buttons stay visible) ---
@@ -147,7 +153,29 @@ class BenchmarkOptions(VerticalScroll):
         # Explicit topology selection -> pass an explicit nodelist to the engine.
         if state.get("nodes") == "topology" and self.selected_nodes:
             state["nodelist"] = list(self.selected_nodes)
+        # Free-text node list -> parse hostnames and infer the node count.
+        elif state.get("nodes") == "list":
+            parsed = self._parse_node_list(state.get("node_list", ""))
+            if parsed:
+                state["nodelist"] = parsed
+                state["numnodes"] = str(len(parsed))
         return state
+
+    @staticmethod
+    def _parse_node_list(text: str) -> list[str]:
+        """Parse a comma/whitespace-separated hostname list into a deduped list.
+
+        The number of nodes is simply the length of this list, so the user never
+        has to type the count by hand.
+        """
+        if not text:
+            return []
+        out: list[str] = []
+        for host in text.replace(",", " ").split():
+            host = host.strip()
+            if host and host not in out:
+                out.append(host)
+        return out
 
     def set_state(self, state: dict) -> None:
         """
@@ -183,14 +211,18 @@ class BenchmarkOptions(VerticalScroll):
         """Gestisce i cambiamenti nelle selezioni."""
         if event.select.id == "nodes":
             node_file_input = self.query_one("#node_file", Input)
+            node_list_input = self.query_one("#node_list", Input)
             data_table = self.query_one("#node_table", DataTable)
             data_table.clear()
 
             # Reset source-specific widgets; re-enable per branch below.
             is_topology = (event.value == "topology")
+            is_list = (event.value == "list")
             self.query_one("#topology_controls").display = is_topology
-            # Node count is derived from the topology selection, so lock it there.
-            self.query_one("#numnodes", Input).disabled = is_topology
+            node_list_input.display = is_list
+            # Node count is derived from the explicit selection, so lock it for
+            # the topology map and the free-text list.
+            self.query_one("#numnodes", Input).disabled = is_topology or is_list
 
             if is_topology:
                 # Pre-fill with the preset's topology as a default the user can change.
@@ -201,6 +233,11 @@ class BenchmarkOptions(VerticalScroll):
             if event.value == "file":
                 node_file_input.visible = True
                 data_table.visible = False
+            elif is_list:
+                # Hostnames are typed into node_list; parse them live below.
+                node_file_input.visible = False
+                data_table.visible = True
+                self._refresh_node_list_table(node_list_input.value)
             elif event.value == "topology":
                 # Selection happens in the modal map; keep the table for results.
                 node_file_input.visible = False
@@ -233,6 +270,24 @@ class BenchmarkOptions(VerticalScroll):
 
                 node_file_input.visible= False
                 node_file_input.value = ""
+
+    @on(Input.Changed, "#node_list")
+    def _on_node_list_changed(self, event: Input.Changed) -> None:
+        """Live-parse the typed node list (only while the 'list' source is active)."""
+        if self.query_one("#nodes", Select).value == "list":
+            self._refresh_node_list_table(event.value)
+
+    def _refresh_node_list_table(self, text: str) -> None:
+        """Show the parsed hostnames and keep numnodes in sync with the count."""
+        parsed = self._parse_node_list(text)
+        data_table = self.query_one("#node_table", DataTable)
+        data_table.clear()
+        if parsed:
+            for node in parsed:
+                data_table.add_row(node)
+            self.query_one("#numnodes", Input).value = str(len(parsed))
+        else:
+            data_table.add_row("Enter a comma-separated node list above.")
 
     # --- Topology-aware node selection ------------------------------------
     @on(Button.Pressed, "#browse_topology")
