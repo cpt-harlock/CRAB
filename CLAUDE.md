@@ -176,8 +176,13 @@ Reports per-node / per-round / overall **bandwidth** (full-duplex aggregate
 decimal GB/s; unidirectional = half) and **latency** (`duration/(window*gran)`;
 a true latency only when `window==1`), plus per-round **topology distance** mix
 (same_switch / same_cell / cross_cell via `Topology.locality()`) and flagged
-under-performing nodes. Writes `report.txt`, `summary.json` (`--json`), and v1
-figures to `<exp_dir>/analysis/`. Design + roadmap: `PLAN_RESULT_ANALYZER.md`.
+under-performing nodes. A **per-node peer profile** classifies each node's
+per-peer bandwidth (uniform / bimodal / mixed / broadly_slow) and auto-detects
+the single-rail/NIC signature (a fast vs ~half-rate cluster). A
+**per-round-per-node** view lists each node's peer + distance + bandwidth/latency
+each round. Writes `report.txt`, `peer_profiles.txt`, `per_round_per_node.txt`,
+`summary.json` (`--json`), and figures to `<exp_dir>/analysis/`; `--detail` also
+echoes the per-peer / per-round tables to stdout. Design: `PLAN_RESULT_ANALYZER.md`.
 
 ## Dependencies
 

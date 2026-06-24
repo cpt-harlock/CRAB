@@ -70,10 +70,22 @@ def analyze_exp_dir(exp_dir: str, args) -> int:
     report = report_text.format_report(an, ol, topo_path)
     print(report)
 
+    # detailed per-peer and per-round-per-node views (verbose: written to files
+    # always; echoed to stdout only with --detail)
+    peer_profiles = report_text.format_peer_profiles(an)
+    per_round_per_node = report_text.format_per_round_per_node(an)
+    if args.detail:
+        print("\n" + peer_profiles)
+        print("\n" + per_round_per_node)
+
     outdir = args.outdir or os.path.join(exp_dir, "analysis")
     os.makedirs(outdir, exist_ok=True)
     with open(os.path.join(outdir, "report.txt"), "w") as fh:
         fh.write(report + "\n")
+    with open(os.path.join(outdir, "peer_profiles.txt"), "w") as fh:
+        fh.write(peer_profiles + "\n")
+    with open(os.path.join(outdir, "per_round_per_node.txt"), "w") as fh:
+        fh.write(per_round_per_node + "\n")
     if args.json:
         with open(os.path.join(outdir, "summary.json"), "w") as fh:
             json.dump(report_text.build_summary(an, ol), fh, indent=2)
@@ -102,6 +114,9 @@ def main(argv=None) -> int:
     ap.add_argument("--json", action="store_true", help="also write summary.json")
     ap.add_argument("--show", action="store_true", help="display plots interactively")
     ap.add_argument("--no-plots", action="store_true", help="skip figures")
+    ap.add_argument("--detail", action="store_true",
+                    help="also print the full peer-profile and per-round-per-node "
+                         "tables to stdout (always written to files)")
     ap.add_argument("--topo-graph", action="store_true", dest="topo_graph",
                     help="also draw the topology node-link diagram")
     ap.add_argument("--slow-k", type=float, default=3.0,

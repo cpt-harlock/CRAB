@@ -69,6 +69,33 @@ class Pairing:
 
 
 @dataclass
+class MatchStat:
+    """One node's performance in one round against one peer (directed)."""
+
+    round_index: int
+    peer_node: str
+    peer_rank: int
+    locality: str                    # same_switch / same_cell / cross_cell / unknown
+    n: int
+    median_bw_gbs: float
+    median_lat_s: float
+
+
+@dataclass
+class PeerProfile:
+    """Characterizes how a node's bandwidth is distributed across its peers."""
+
+    classification: str              # uniform / bimodal / broadly_slow / mixed
+    note: str                        # human-readable one-liner
+    fast_median: float               # GB/s of the fast cluster
+    slow_median: float               # GB/s of the slow cluster (nan if none)
+    ratio: float                     # slow_median / fast_median (nan if none)
+    n_fast: int
+    n_slow: int
+    slow_peers: List[str] = field(default_factory=list)
+
+
+@dataclass
 class NodeStats:
     node: str
     bw: Stat
@@ -76,6 +103,8 @@ class NodeStats:
     median_bw_gbs: float
     median_lat_s: float
     by_locality: Dict[str, Stat] = field(default_factory=dict)
+    matches: List[MatchStat] = field(default_factory=list)   # per-round, per-peer
+    profile: Optional[PeerProfile] = None
 
 
 @dataclass
@@ -148,6 +177,44 @@ def build_pairings(ds: Dataset, params: Params,
     return pairings, warnings
 
 
+def _classify_peer_profile(match_stats: List["MatchStat"],
+                           slow_ratio: float = 0.75) -> Optional[PeerProfile]:
+    """Detect whether a node's per-peer bandwidth is uniform or splits into a
+    fast/slow cluster — the latter is the signature of a degraded rail/NIC that
+    only some destinations route over (e.g. single-rail ~half bandwidth)."""
+    vals = np.array([m.median_bw_gbs for m in match_stats], dtype=float)
+    peers = [m.peer_node for m in match_stats]
+    vals = vals[np.isfinite(vals)]
+    if vals.size < 3:
+        return None
+
+    fast_ref = float(np.median(vals[vals >= np.median(vals)]))  # upper-half median
+    slow_mask = vals < slow_ratio * fast_ref
+    n_slow = int(slow_mask.sum())
+    n_fast = int(vals.size - n_slow)
+    fast_med = float(np.median(vals[~slow_mask])) if n_fast else float("nan")
+    slow_med = float(np.median(vals[slow_mask])) if n_slow else float("nan")
+    ratio = (slow_med / fast_med) if (n_slow and fast_med) else float("nan")
+    slow_peers = [p for p, s in zip(peers, slow_mask) if s]
+
+    if n_slow == 0:
+        cls, note = "uniform", f"uniform across {n_fast} peers (~{fast_med:.1f} GB/s)"
+    elif n_fast == 0:
+        cls = "broadly_slow"
+        note = f"broadly slow across all {n_slow} peers (~{slow_med:.1f} GB/s)"
+    elif n_fast >= 2 and n_slow >= 2:
+        cls = "bimodal"
+        note = (f"bimodal: {n_fast} peers ~{fast_med:.1f} GB/s, {n_slow} peers "
+                f"~{slow_med:.1f} GB/s ({ratio:.2f}x) — possible single-rail/NIC")
+    else:
+        cls = "mixed"
+        note = (f"{n_slow} slow peer(s) ~{slow_med:.1f} vs {n_fast} ~{fast_med:.1f} "
+                f"GB/s")
+    return PeerProfile(classification=cls, note=note, fast_median=fast_med,
+                       slow_median=slow_med, ratio=ratio, n_fast=n_fast,
+                       n_slow=n_slow, slow_peers=slow_peers)
+
+
 def _node_stats(node: str, matches: List[Match], params: Params,
                 resolver: TopoResolver) -> NodeStats:
     all_d = np.concatenate([np.asarray(m.durations, dtype=float)
@@ -156,16 +223,25 @@ def _node_stats(node: str, matches: List[Match], params: Params,
     lat = summarize(latency_s(all_d, params))
 
     by_loc: Dict[str, List[float]] = {}
+    match_stats: List[MatchStat] = []
     for m in matches:
         loc = resolver.locality(m.node, m.peer_node)
         label = locality_label(loc)
-        by_loc.setdefault(label, []).extend(
-            bandwidth_gbs(m.durations, params).tolist())
+        mbw = bandwidth_gbs(m.durations, params)
+        mlat = latency_s(m.durations, params)
+        by_loc.setdefault(label, []).extend(mbw.tolist())
+        match_stats.append(MatchStat(
+            round_index=m.round_index, peer_node=m.peer_node,
+            peer_rank=m.peer_rank, locality=label, n=len(m.durations),
+            median_bw_gbs=float(np.median(mbw)) if mbw.size else float("nan"),
+            median_lat_s=float(np.median(mlat)) if mlat.size else float("nan")))
     by_locality = {k: summarize(v) for k, v in by_loc.items()}
+    match_stats.sort(key=lambda s: s.round_index)
 
     return NodeStats(node=node, bw=bw, lat=lat,
                      median_bw_gbs=bw.median, median_lat_s=lat.median,
-                     by_locality=by_locality)
+                     by_locality=by_locality, matches=match_stats,
+                     profile=_classify_peer_profile(match_stats))
 
 
 def analyze(ds: Dataset, params: Params, resolver: TopoResolver) -> Analysis:

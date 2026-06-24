@@ -8,6 +8,10 @@ from .metrics import Analysis, Stat
 from .outliers import OutlierResult
 
 
+def _short(host: str) -> str:
+    return host.split(".")[0]
+
+
 def _us(x: float) -> str:
     return "n/a" if x != x else f"{x * 1e6:.1f}"      # seconds -> microseconds
 
@@ -90,6 +94,18 @@ def format_report(an: Analysis, outliers: OutlierResult,
                  f"{ns.bw.n:>5}{mark}")
     L.append("")
 
+    L.append("-- PER-NODE PEER PROFILE (summary) " + "-" * 43)
+    L.append("  how each node's bandwidth splits across its peers:")
+    for ns in sorted(an.nodes, key=lambda x: x.median_bw_gbs):
+        if ns.profile is None:
+            continue
+        flag = "" if ns.profile.classification in ("uniform",) else "  <--"
+        L.append(f"  {_short(ns.node):<12} {ns.profile.classification:<12} "
+                 f"{ns.profile.note}{flag}")
+    L.append("  (full per-peer and per-round tables: see the analysis dir / "
+             "--detail)")
+    L.append("")
+
     L.append("-- UNDER-PERFORMING NODES " + "-" * 52)
     L.append(f"  method: {outliers.method}")
     if outliers.low_confidence:
@@ -111,6 +127,41 @@ def format_report(an: Analysis, outliers: OutlierResult,
         L.append("")
 
     L.append("=" * 78)
+    return "\n".join(L)
+
+
+def format_peer_profiles(an: Analysis) -> str:
+    """Full per-node peer profile: every peer sorted by bandwidth, with locality."""
+    L = ["=" * 78, "PER-NODE PEER PROFILE (full)", "=" * 78,
+         "For each node, its bandwidth to each peer (sorted slow->fast).", ""]
+    for ns in sorted(an.nodes, key=lambda x: x.median_bw_gbs):
+        L.append(f"-- {_short(ns.node)}  (median {_g(ns.median_bw_gbs)} GB/s) " +
+                 "-" * 30)
+        if ns.profile is not None:
+            L.append(f"   profile: {ns.profile.classification} — {ns.profile.note}")
+        L.append(f"   {'peer':<12} {'distance':<12} {'med BW':>8} {'uni':>7} "
+                 f"{'med lat(us)':>11} {'n':>5}")
+        for m in sorted(ns.matches, key=lambda x: x.median_bw_gbs):
+            L.append(f"   {_short(m.peer_node):<12} {m.locality:<12} "
+                     f"{_g(m.median_bw_gbs):>8} {_g(m.median_bw_gbs / 2):>7} "
+                     f"{_us(m.median_lat_s):>11} {m.n:>5}")
+        L.append("")
+    return "\n".join(L)
+
+
+def format_per_round_per_node(an: Analysis) -> str:
+    """Per node, how it performed each round and with whom (+ topology distance)."""
+    L = ["=" * 78, "PER-ROUND PER-NODE", "=" * 78,
+         "For each node, its peer and bandwidth/latency in each round.", ""]
+    for ns in sorted(an.nodes, key=lambda x: _short(x.node)):
+        L.append(f"-- {_short(ns.node)} " + "-" * 60)
+        L.append(f"   {'round':>5} {'peer':<12} {'distance':<12} {'med BW':>8} "
+                 f"{'med lat(us)':>11} {'n':>5}")
+        for m in sorted(ns.matches, key=lambda x: x.round_index):
+            L.append(f"   {m.round_index:>5} {_short(m.peer_node):<12} "
+                     f"{m.locality:<12} {_g(m.median_bw_gbs):>8} "
+                     f"{_us(m.median_lat_s):>11} {m.n:>5}")
+        L.append("")
     return "\n".join(L)
 
 
@@ -140,7 +191,20 @@ def build_summary(an: Analysis, outliers: OutlierResult) -> dict:
                     "lat": _stat_dict(r.lat)} for r in an.rounds],
         "nodes": [{"node": ns.node, "median_bw_gbs": ns.median_bw_gbs,
                    "median_lat_s": ns.median_lat_s,
-                   "bw": _stat_dict(ns.bw)} for ns in an.nodes],
+                   "bw": _stat_dict(ns.bw),
+                   "profile": (None if ns.profile is None else {
+                       "classification": ns.profile.classification,
+                       "note": ns.profile.note,
+                       "fast_median": ns.profile.fast_median,
+                       "slow_median": ns.profile.slow_median,
+                       "ratio": ns.profile.ratio,
+                       "n_fast": ns.profile.n_fast, "n_slow": ns.profile.n_slow,
+                       "slow_peers": ns.profile.slow_peers}),
+                   "matches": [{"round": m.round_index, "peer": m.peer_node,
+                                "peer_rank": m.peer_rank, "locality": m.locality,
+                                "median_bw_gbs": m.median_bw_gbs,
+                                "median_lat_s": m.median_lat_s, "n": m.n}
+                               for m in ns.matches]} for ns in an.nodes],
         "outliers": {"method": outliers.method,
                      "low_confidence": outliers.low_confidence,
                      "median": outliers.median, "mad": outliers.mad,
