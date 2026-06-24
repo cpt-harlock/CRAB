@@ -7,6 +7,7 @@ Produces, into ``outdir``:
   4. per-round topology-mix stacked bar with round median bandwidth overlaid
   5. pairwise bandwidth heatmap (node x peer, locality-colored borders)
   6. bandwidth & latency CDFs (slow region shaded)
+  7. per-round bandwidth box plot
 """
 
 from __future__ import annotations
@@ -133,9 +134,46 @@ def generate_plots(an: Analysis, outliers: OutlierResult, outdir: str,
     if p:
         paths.append(p)
 
+    # 7. per-round bandwidth box plot -------------------------------------
+    p = _plot_round_box(an, outdir, plt)
+    if p:
+        paths.append(p)
+
     if show:
         plt.show()
     return paths
+
+
+def _plot_round_box(an: Analysis, outdir: str, plt) -> str:
+    """Box plot of per-sample bandwidth, one box per tournament round."""
+    rounds = sorted({p.round_index for p in an.pairings})
+    if not rounds:
+        return ""
+    data, labels = [], []
+    for r in rounds:
+        vals = np.concatenate([bandwidth_gbs(p.durations, an.params)
+                               for p in an.pairings if p.round_index == r])
+        vals = vals[np.isfinite(vals)]
+        if vals.size:
+            data.append(vals)
+            labels.append(str(r))
+    if not data:
+        return ""
+
+    fig, ax = plt.subplots(figsize=(max(6, len(data) * 0.6), 4.5))
+    bp = ax.boxplot(data, tick_labels=labels, patch_artist=True, showfliers=True)
+    for patch in bp["boxes"]:
+        patch.set_facecolor("#1f77b4")
+        patch.set_alpha(0.6)
+    ax.set_xlabel("round")
+    ax.set_ylabel("bandwidth (GB/s, full-duplex)")
+    ax.set_title("Per-round bandwidth distribution")
+    ax.grid(True, axis="y", alpha=0.3)
+    fig.tight_layout()
+    out = os.path.join(outdir, "per_round_bandwidth_box.png")
+    fig.savefig(out, dpi=120)
+    plt.close(fig)
+    return out
 
 
 def _node_order(an: Analysis) -> list:
