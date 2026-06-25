@@ -4,4 +4,8 @@ __pycache__/
 .env
 configs/
 hosts
+
+# run outputs and build / runtime artifacts
 data/
+*.egg-info/
+worker_nodelist.txt
