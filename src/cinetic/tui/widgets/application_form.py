@@ -76,7 +76,7 @@ class ApplicationForm(Vertical):
                     pass
 
     def _wrappers_dir(self) -> str:
-        """Default browse location: the CRAB wrappers directory, if it exists."""
+        """Default browse location: the CINETIC wrappers directory, if it exists."""
         raw = os.environ.get("CINETIC_WRAPPERS_PATH", "")
         if raw:
             raw = raw.replace("__CWD__", os.getcwd())

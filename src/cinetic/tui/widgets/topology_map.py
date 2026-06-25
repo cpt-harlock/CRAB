@@ -1,4 +1,4 @@
-"""Graphical, topology-aware node selector for the CRAB TUI.
+"""Graphical, topology-aware node selector for the CINETIC TUI.
 
 Renders a parsed topology (see :mod:`cinetic.topology`) as a 2D map:
 

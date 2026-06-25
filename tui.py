@@ -13,6 +13,6 @@ if __name__ == "__main__":
         from cinetic.cli.orchestrator import run_from_cli
         run_from_cli()
     else:
-        from cinetic.tui.app import BenchmarkApp
-        app = BenchmarkApp()
+        from cinetic.tui.app import CineticApp
+        app = CineticApp()
         app.run()

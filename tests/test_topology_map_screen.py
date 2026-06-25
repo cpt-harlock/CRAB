@@ -27,7 +27,7 @@ TOPO = os.path.join(ROOT, "topologies", "example.json")
 class _Harness(App):
     """Minimal app that opens the modal and captures its result."""
 
-    CSS_PATH = os.path.join(ROOT, "src", "cinetic", "tui", "assets", "tui.tcss")
+    CSS_PATH = os.path.join(ROOT, "src", "cinetic", "tui", "assets", "cinetic.tcss")
 
     def __init__(self, topology, preselected=None):
         super().__init__()

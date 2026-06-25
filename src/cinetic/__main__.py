@@ -52,8 +52,8 @@ def _dispatch(command: str, rest: list[str]) -> int:
         from cinetic.cli.orchestrator import orchestrate_main
         return orchestrate_main(rest)
     if command == "tui":
-        from cinetic.tui.app import BenchmarkApp
-        BenchmarkApp().run()
+        from cinetic.tui.app import CineticApp
+        CineticApp().run()
         return 0
     if command == "analyze":
         from cinetic.analysis.cli import main as analyze_main

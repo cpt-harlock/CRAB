@@ -1,9 +1,8 @@
-# Questo file contiene le costanti condivise per l'applicazione TUI
-# per evitare errori di importazione circolare.
+# Shared constants for the TUI, kept here to avoid circular imports.
 
 SECTIONS = [
     "Applications",
     "Benchmark Options",
-    "Enviroment Settings",
+    "Environment Settings",
     "Runner Log"
 ]

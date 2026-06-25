@@ -15,17 +15,24 @@ from .widgets.environment_settings import EnvironmentSettings
 
 from .controller import TUIController
 
-class BenchmarkApp(App):
-    CSS_PATH = "assets/tui.tcss"
-    BINDINGS = [("q", "quit", "Quit"), ("l", "load", "Load"), ("s", "save", "Save")]
+class CineticApp(App):
+    CSS_PATH = "assets/cinetic.tcss"
+    TITLE = "CINETIC"
+    SUB_TITLE = "co-running interference & network-topology investigation"
+    BINDINGS = [
+        ("q", "quit", "Quit"),
+        ("l", "load", "Load"),
+        ("s", "save", "Save"),
+        ("question_mark", "about", "About"),
+    ]
 
     current_tab = reactive(0)
 
     def __init__(self):
         super().__init__()
         self.current_environment_settings = self._load_default_env()
-        
-        # Inizializza il controller, passando la callback per loggare
+
+        # Initialize the controller, passing the logging callback.
         self.controller = TUIController(log_callback=self.log_to_tui)
 
         self.applications_container = ApplicationSetup(self)
@@ -37,9 +44,15 @@ class BenchmarkApp(App):
         )
     
     def log_to_tui(self, message: str):
-        # Metodo di callback che il controller userà
+        # Callback the controller uses to push log lines into the TUI.
         log = self.query_one("#runner-log", RichLog)
         self.call_from_thread(log.write, message)
+
+    def action_about(self) -> None:
+        self.notify(
+            "CINETIC — co-running interference & network-topology "
+            "investigation for HPC clusters.",
+            title="CINETIC", timeout=6)
     
     def _load_default_env(self):
         try:
@@ -194,25 +207,24 @@ class BenchmarkApp(App):
     @on(RunBenchmark)
     @work
     async def handle_run_request(self) -> None:
-        """
-        Gestisce la richiesta di esecuzione del benchmark.
-        """
-        # 1. Prepara la TUI
+        """Handle the benchmark run request."""
+        # 1. Prepare the TUI.
         log = self.query_one("#runner-log", RichLog)
         log.clear()
         self.show_tab(3)
 
-        # 2. Raccogli la configurazione del benchmark dalla UI
+        # 2. Collect the benchmark configuration from the UI.
         self.save_benchmark_state()
         global_options_state = self.benchmark_container.get_state()
         applications_state = self.applications_container.get_state()
 
-        # 3. Raccogli le impostazioni dell'ambiente dalla TUI (env + sbatch + header)
+        # 3. Collect the environment settings from the TUI (env + sbatch + header).
         env_state = self.env_container.get_full_state()
         selected_preset = self.env_container.current_preset_name
 
-        # Inietta le direttive SBATCH e i comandi di header nelle global_options,
-        # come fa l'orchestrator CLI, così l'Engine le include nel job file.
+        # Inject the SBATCH directives and header commands into global_options,
+        # exactly as the CLI orchestrator does, so the Engine writes them into
+        # the job file.
         global_options_state["system_sbatch"] = env_state.get("sbatch", [])
         global_options_state["system_header"] = env_state.get("header", [])
 
@@ -223,7 +235,7 @@ class BenchmarkApp(App):
 
         tui_settings = env_state.get("env", {}).copy()
 
-        # 4. Usa il controller per eseguire il benchmark in un thread
+        # 4. Use the controller to run the benchmark in a thread.
         self.controller.run_in_thread(
             benchmark_config=benchmark_config,
             tui_settings=tui_settings,
