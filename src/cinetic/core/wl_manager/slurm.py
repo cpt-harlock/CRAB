@@ -1,8 +1,12 @@
-import os
-import shlex
+from typing import List, Optional
 
-from typing import List, Optional # Aggiunto typing per chiarezza
+from cinetic.runtime import RuntimeContext
+
 class wl_manager:
+    def __init__(self, ctx: Optional[RuntimeContext] = None):
+        # Fall back to the live environment when no context is injected.
+        self.ctx = ctx if ctx is not None else RuntimeContext.from_env()
+
     # Generates a script that can be used to run all the benchmarks specified in the schedule.
     def write_script(self, runner_args, schedules, nams, name, splits, node_file, ppn):
         script=open(name,'w+')
@@ -47,7 +51,7 @@ class wl_manager:
         slurm_string = (
             'srun --export=ALL ' +
             node_list_arg + ' ' +
-            os.environ.get("CINETIC_PINNING_FLAGS", "") + ' ' + 
+            self.ctx.pinning_flags + ' ' +
             '-n ' + str(ppn * num_nodes) + ' ' +
             '-N ' + str(num_nodes) + ' ' +
             final_cmd  # Usiamo il comando calcolato (wrapped o raw)

@@ -2,7 +2,14 @@ import os
 
 from typing import List, Optional
 
+from cinetic.runtime import RuntimeContext
+
 class wl_manager:
+    def __init__(self, ctx: Optional[RuntimeContext] = None):
+        # Fall back to the live environment when no context is injected, so the
+        # backend still works if constructed directly (e.g. in a test).
+        self.ctx = ctx if ctx is not None else RuntimeContext.from_env()
+
     # Generates a script that can be used to run all the benchmarks specified in the schedule.
     def write_script(self, runner_args, schedules, nams, name, splits, node_file, ppn):
         script=open(name,'w+')
@@ -33,18 +40,24 @@ class wl_manager:
             final_cmd = cmd
         # ---------------------
 
-        # OpenMPI non propaga automaticamente le env var non-OMPI_*: inoltriamo
-        # esplicitamente quelle che servono ai binari (es. dir risultati per-nodo).
-        env_forward = ""
-        if "CINETIC_NODE_RESULTS_DIR" in os.environ:
-            env_forward = "-x CINETIC_NODE_RESULTS_DIR "
+        # OpenMPI does not forward non-OMPI_* env vars automatically: explicitly
+        # forward the ones the binaries need (e.g. the per-node results dir).
+        # That value is dynamic and per-experiment, so it stays in os.environ.
+        env_forward = "-x CINETIC_NODE_RESULTS_DIR" \
+            if "CINETIC_NODE_RESULTS_DIR" in os.environ else ""
 
-        job_cmd = os.environ["CINETIC_MPIRUN"] + " " + \
-                  os.environ["CINETIC_MPIRUN_MAP_BY_NODE_FLAG"] + " " + \
-                  os.environ["CINETIC_MPIRUN_ADDITIONAL_FLAGS"] + " " + \
-                  os.environ["CINETIC_PINNING_FLAGS"] + " " + \
-                  env_forward + \
-                  os.environ["CINETIC_MPIRUN_HOSTNAMES_FLAG"] + " " + node_list_string + " " + \
-                  "-np " + str(ppn*num_nodes) + " " + final_cmd
+        ctx = self.ctx
+        parts = [
+            ctx.mpirun,
+            ctx.mpirun_map_by_node_flag,
+            ctx.mpirun_additional_flags,
+            ctx.pinning_flags,
+            env_forward,
+            ctx.mpirun_hostnames_flag,
+            node_list_string,
+            "-np " + str(ppn * num_nodes),
+            final_cmd,
+        ]
+        job_cmd = " ".join(p for p in parts if p)
         print("[DEBUG]: MPI command is: " + job_cmd)
         return job_cmd

@@ -145,6 +145,20 @@ worker. It's implicit, untyped, and the single most recognizable CRAB pattern.
 **Payoff:** typed, testable, explicit; and the diff touches every core file in a
 way that makes the lineage structurally different.
 
+**Scope decision taken during P3 (refinement of the above):** the wrappers are
+`exec`-loaded *in-process* and read `os.environ["CINETIC_ROOT"]` at import time,
+and the spawned MPI/Slurm subprocesses inherit `os.environ`. There, the
+environment is a *legitimate transport*, not sloppy globals. So `RuntimeContext`
+was made the typed front door for the **framework core** (engine + `wl_manager`
+backends), which is the recognizable part and the part worth unit-testing;
+`os.environ` is retained — and now documented — purely as the live transport
+across those two boundaries and for dynamic per-experiment values (the
+node-results dir). Rewriting all 71 `exec`-loaded wrappers to take a context
+object was judged high-churn / high-fragility / low-value and intentionally
+**not** done. Net effect: the core no longer reads scattered `CINETIC_*` from
+`os.environ` (only two intentional transport touch-points remain), and the
+backends are now constructible and testable with an injected context.
+
 ### A2 — Unify the five top-level scripts into one `cinetic` CLI
 **Today:** `cli.py`, `tui.py`, `tournament_analyzer.py`, `topology_parser.py`,
 `blink_plotter.py` are independent scripts each doing their own `sys.path` hack.
@@ -237,7 +251,7 @@ The TUI is the most visible surface — it must look like a different product.
 | **P0** ✅ | Branch `cinetic`; add `pyproject.toml` (A3) alongside existing scripts; confirm `pip install -e .` imports `crab` still. | DONE — branch created, pyproject validated, package discoverable, imports OK. |
 | **P1** ✅ | Package rename `src/crab`→`src/cinetic` + all imports + the 3 tests. Top-level scripts updated. | DONE — `git mv` (history kept), 15 py files rewritten, 3 standalone tests pass, analyzer + CLI run. |
 | **P2** ✅ | Env-var rename `CRAB_*`→`CINETIC_*` everywhere + compat shim (D2) + `presets.json` rewrite + `cinetic_job.sh`/output path. | DONE — 119 files swept, `compat.py` shim wired into orchestrator + worker, `tournament_nb.c` legacy fallback, presets clean, analyzer end-to-end OK. |
-| **P3** | A1 runtime context: introduce `RuntimeContext`, migrate engine + wl_manager + wrappers off `os.environ`. | Same `local` run; spot-check 3–4 wrapper binaries resolve. |
+| **P3** ✅ | A1 runtime context: introduce `RuntimeContext`, migrate engine + wl_manager off `os.environ`. | DONE — `runtime.py` added; engine + slurm/mpi/template backends read typed ctx; `os.environ` kept only as the documented subprocess/dynamic transport; new `tests/test_runtime_context.py` (7) + existing tests pass; analyzer unaffected. **Scope note below.** |
 | **P4** | A2 unified `cinetic` CLI + A4 worker subcommand. | All five subcommands work; full submit→worker→analyze loop on `local`. |
 | **P5** | TUI redesign (§5): theme, wordmark, typo, English, optional class rename. | Headless `run_test()` compiles; visual check of `cinetic tui`. |
 | **P6** | Docs: README, CLAUDE.md, PLAN files, analyzer `tournament_nb.c` env name. | Docs reference only CINETIC; `make` in `benchmarks/blink` still builds. |

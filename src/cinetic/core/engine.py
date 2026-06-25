@@ -14,6 +14,8 @@ import json
 import shutil
 from typing import List, Dict, Any, Callable, Optional, Union
 
+from cinetic.runtime import RuntimeContext
+
 # =============================================================================
 # 1. DATA CONTAINERS & UTILITIES
 # =============================================================================
@@ -308,7 +310,11 @@ class ExperimentRunner:
     def setup(self):
         """Loads apps, workload manager, and calculates node layout."""
         self.log(f"[{self.name}] Setting up...")
-        
+
+        # Typed view of the resolved environment (already materialized into
+        # os.environ by the worker before setup runs).
+        self.ctx = RuntimeContext.from_env()
+
         # 1. Load Applications
         self.apps = []
         app_configs = self.config.get("apps", {})
@@ -326,7 +332,7 @@ class ExperimentRunner:
                 raise ImportError(
                     f"'{path}' is not a loadable Python wrapper. "
                     f"Point the application path to a wrapper .py "
-                    f"(e.g. in {os.environ.get('CINETIC_WRAPPERS_PATH', 'wrappers')}), "
+                    f"(e.g. in {self.ctx.wrappers_path or 'wrappers'}), "
                     f"not the benchmark binary."
                 )
             mod = importlib.util.module_from_spec(spec)
@@ -334,9 +340,9 @@ class ExperimentRunner:
             return mod
 
         # WLM Loading
-        wlm_name = os.environ.get("CINETIC_WL_MANAGER", "slurm") # default
+        wlm_name = self.ctx.wl_manager
         wlm_path = f"./src/cinetic/core/wl_manager/{wlm_name}.py"
-        self.wlmanager = load_module(wlm_path).wl_manager()
+        self.wlmanager = load_module(wlm_path).wl_manager(self.ctx)
 
         # App Instantiation
         idx_counter = 0
@@ -345,9 +351,9 @@ class ExperimentRunner:
             path = details.get("path")
             if not path: continue
 
-            # Controlla la ENV CINETIC_WRAPPERS_PATH
-            if not os.path.isabs(path) and "CINETIC_WRAPPERS_PATH" in os.environ:
-                path = os.path.join(os.environ["CINETIC_WRAPPERS_PATH"], path)
+            # Resolve a relative wrapper path against the configured wrappers dir.
+            if not os.path.isabs(path) and self.ctx.wrappers_path:
+                path = os.path.join(self.ctx.wrappers_path, path)
             
             if not os.path.exists(path):
                  self.log(f"[ERROR] Wrapper not found at: {path}")
@@ -703,7 +709,8 @@ class Engine:
 
     def _run_orchestrator(self, config: Dict[str, Any], environment: Dict[str, Any]):
         self.log("Engine running in ORCHESTRATOR mode.")
-        
+        ctx = RuntimeContext.from_env(environment)
+
         if "experiments" not in config:
             if "applications" in config:
                 config["experiments"] = {"default_ex": {"apps": config.pop("applications")}}
@@ -746,14 +753,14 @@ class Engine:
             folder_name = timestamp_str
 
         # 3. Costruzione path finale
-        runner_id = (environment.get("CINETIC_SYSTEM", "unknown") + "/" + folder_name)
+        runner_id = (ctx.system + "/" + folder_name)
         data_directory = os.path.join(data_path, runner_id)
         # --------------------------------------
 
         os.makedirs(data_directory, exist_ok=True)
 
         with open(desc_file, 'a+') as f:
-            f.write(f"{environment.get('CINETIC_SYSTEM')},{num_nodes},{g_opts.get('extrainfo')},{data_directory}\n")
+            f.write(f"{ctx.system},{num_nodes},{g_opts.get('extrainfo')},{data_directory}\n")
 
         with open(os.path.join(data_directory, 'config.json'), 'w') as f:
             json.dump(config, f, indent=4)
