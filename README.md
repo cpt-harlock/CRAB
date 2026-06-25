@@ -1,4 +1,5 @@
-# ⚡ CINETIC — Co-running INterference & nEtwork-Topology Investigation for Clusters
+# ⚡ CINETIC — CINECA INterference & nEtwork-Topology Investigation for Clusters
+
 [![Python Version](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Build Status](https://img.shields.io/badge/build-passing-brightgreen)](https://github.com/actions)
@@ -11,61 +12,64 @@
 
 ## ✨ Key Features
 
-*   **Dual Interface**: Use it either through a **Textual User Interface (TUI)** for interactive usage or a **Command Line Interface (CLI)**
-*   **Advanced Environment Management**: Easily define and switch between system environments (e.g., `lumi`, `leonardo`, etc.) via a centralized preset system.
-*   **Complex Application Mixes**: Run multiple applications simultaneously, defining "victims" (to be measured) and "aggressors" (to create interference).
-*   **Automated Data Collection**: Automatically gathers performance data, analyzes it, and can stop execution once statistical convergence is reached.
-*   **Standard Output Formats**: Saves collected data in the standard format CSV, ready for analysis with tools like Pandas or R.
-*   **Topology-Aware Node Selection**: Parse the fabric (`ibnetdiscover`) into a neutral topology model and pin jobs to specific nodes — interactively via a clickable **Topology Map**, or by hostname list — so you control exactly where victims and aggressors land.
-*   **Built-in Result Analysis**: Turn per-node benchmark dumps into bandwidth/latency reports (per-node, per-round, overall), per-round topology-distance breakdowns, automatic flagging of under-performing nodes, per-node peer profiles, and figures — all with one command.
-*   **Extensible Architecture**: Add support for new benchmarks simply by creating a Python "wrapper," without modifying the framework core.
+* **Dual Interface**: Use it either through a **Textual User Interface (TUI)** for interactive usage or a **Command Line Interface (CLI)**
+* **Advanced Environment Management**: Easily define and switch between system environments (e.g., `lumi`, `leonardo`, etc.) via a centralized preset system.
+* **Complex Application Mixes**: Run multiple applications simultaneously, defining "victims" (to be measured) and "aggressors" (to create interference).
+* **Automated Data Collection**: Automatically gathers performance data and parses it into per-metric samples ready for analysis.
+* **Standard Output Formats**: Saves collected data in the standard format CSV, ready for analysis with tools like Pandas or R.
+* **Topology-Aware Node Selection**: Parse the fabric (`ibnetdiscover`) into a neutral topology model and pin jobs to specific nodes — interactively via a clickable **Topology Map**, or by hostname list — so you control exactly where victims and aggressors land.
+* **Built-in Result Analysis**: Turn per-node benchmark dumps into bandwidth/latency reports (per-node, per-round, overall), per-round topology-distance breakdowns, automatic flagging of under-performing nodes, per-node peer profiles, and figures — all with one command.
+* **Extensible Architecture**: Add support for new benchmarks simply by creating a Python "wrapper," without modifying the framework core.
 
 ## 📚 Table of Contents
 
-*   [🚀 Installation and Setup](#-installation-and-setup)
-*   [🕹️ Using the Framework](#-using-the-framework)
-    *   [TUI Mode (Interactive)](#tui-mode-interactive)
-    *   [CLI Mode (Command Line)](#cli-mode-command-line)
-*   [🗺️ Topology-Aware Node Selection](#️-topology-aware-node-selection)
-*   [📊 Analyzing Results](#-analyzing-results)
-*   [🏗️ Framework Architecture](#️-framework-architecture)
-*   [🧩 Adding a New Benchmark](#-adding-a-new-benchmark)
-    *   [Wrapper Structure](#wrapper-structure)
-    *   [Mandatory Methods](#mandatory-methods)
-*   [📄 Configuration File Format](#-configuration-file-format)
-    *   [The `presets.json` File](#the-presetsjson-file)
-    *   [The Benchmark Config File](#the-benchmark-config-file)
-*   [📜 License](#-license)
+* [🚀 Installation and Setup](#-installation-and-setup)
+* [🕹️ Using the Framework](#-using-the-framework)
+  * [TUI Mode (Interactive)](#tui-mode-interactive)
+  * [CLI Mode (Command Line)](#cli-mode-command-line)
+* [🗺️ Topology-Aware Node Selection](#️-topology-aware-node-selection)
+* [📊 Analyzing Results](#-analyzing-results)
+* [🏗️ Framework Architecture](#️-framework-architecture)
+* [🧩 Adding a New Benchmark](#-adding-a-new-benchmark)
+  * [Wrapper Structure](#wrapper-structure)
+  * [Mandatory Methods](#mandatory-methods)
+* [📄 Configuration File Format](#-configuration-file-format)
+  * [The `presets.json` File](#the-presetsjson-file)
+  * [The Benchmark Config File](#the-benchmark-config-file)
+* [📜 License](#-license)
 
 ## 🚀 Installation and Setup
 
 ### Prerequisites
 
-*   Python 3.10+
-*   Git
-*   A **Slurm**-managed cluster (production use), or a local machine with an **MPI** runtime (`mpirun`) for smaller runs.
+* Python 3.10+
+* Git
+* A **Slurm**-managed cluster (production use), or a local machine with an **MPI** runtime (`mpirun`) for smaller runs.
 
 ### Installation Steps
 
-1.  **Clone the repository:**
+1. **Clone the repository:**
+
     ```bash
     git clone <your-cinetic-repo-url>
     cd cinetic
     ```
 
-2.  **Create a virtual environment (recommended):**
+2. **Create a virtual environment (recommended):**
+
     ```bash
     python -m venv .venv
     source .venv/bin/activate
     ```
 
-3.  **Install dependencies:**
+3. **Install dependencies:**
+
     ```bash
     pip install -e .[tui,analysis]   # installs the `cinetic` CLI
     # or, without packaging: pip install -r requirements.txt -r requirements-tui.txt
     ```
 
-4.  **Configure cluster environments:**
+4. **Configure cluster environments:**
     Edit `presets.json` — one entry per system you run on. Each preset has three
     optional sections: `env` (environment variables), `sbatch` (directives added
     to every job script), and `header` (shell commands run at job start, e.g.
@@ -100,6 +104,7 @@ You can interact with CINETIC in two ways: through the TUI or the CLI.
 The TUI is ideal for configuring and launching experiments visually and interactively.
 
 **How to start it:**
+
 ```bash
 cinetic tui          # or, legacy shim: python tui.py
 ````
@@ -206,7 +211,7 @@ The framework is designed with a clear separation of responsibilities:
    * Node allocation (via Slurm, if used).
    * Application scheduling.
    * Benchmark process launching through the workload manager.
-   * Completion monitoring, data collection, and convergence checking.
+   * Completion monitoring and data collection.
 3. **Workload Manager (`src/cinetic/core/wl_manager/*.py`)**: Specialized modules that translate a request ("run this command on these nodes") into system-specific commands (e.g., `srun, mpirun ...`). They read their settings from a typed `RuntimeContext` (`src/cinetic/runtime.py`).
 4. **Application Wrappers (`wrappers/*.py`)**: Small Python modules that "wrap" a specific benchmark, teaching the framework how to run it and interpret its output.
 5. **Topology (`src/cinetic/topology/`)**: Parses `ibnetdiscover` into a neutral topology model (switches, NICs, nodes, cells) used for topology-aware node selection and locality classification.
@@ -321,4 +326,3 @@ A JSON file describing a single experiment.
 ## 📜 License
 
 This project is released under the MIT License. See the `LICENSE` file for details.
-
