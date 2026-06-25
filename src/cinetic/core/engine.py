@@ -410,7 +410,7 @@ class ExperimentRunner:
                     )
 
     def execute(self):
-        """Main execution loop (Setup -> Run -> Wait -> Converge)."""
+        """Run the experiment once: launch the scheduled apps, wait, collect."""
         self.log(f"[{self.name}] Execution started.")
 
         # Expose the experiment data dir to the launched binaries so a benchmark
@@ -418,13 +418,9 @@ class ExperimentRunner:
         # ranks share the filesystem but their CWD is not exp_dir.
         os.environ["CINETIC_NODE_RESULTS_DIR"] = os.path.abspath(self.exp_dir)
 
-        # Params
-        min_runs = int(self.global_opts.get('minruns', 10))
-        max_runs = int(self.global_opts.get('maxruns', 20))
+        # The experiment runs once (convergence over multiple runs is disabled);
+        # `timeout` is a wall-clock safety cap on that single run.
         timeout = float(self.global_opts.get('timeout', 1200.0))
-        converge_all = bool(self.global_opts.get('convergeall', False))
-        alpha = float(self.global_opts.get('alpha', 0.05))
-        beta = float(self.global_opts.get('beta', 0.05))
 
         # Get the header from the global options (where the orchestrator put it);
         # default to an empty list if absent.
@@ -451,18 +447,10 @@ class ExperimentRunner:
                 else:
                     static_schedule.append((i, 'k', val))
 
-        runs = 0
-        global_start = time.time()
-        converged = False
-
         try:
+            # Single execution — there is no multi-run convergence loop.
             while True:
-                # Exit conditions
-                elapsed = time.time() - global_start
-                if runs >= max_runs or (runs >= min_runs and converged) or elapsed >= timeout:
-                    break
-
-                self.log(f"[{self.name}] Run {runs+1}...")
+                self.log(f"[{self.name}] Running...")
                 run_start = time.time()
                 
                 # Reset ephemeral schedule for this run
@@ -471,10 +459,14 @@ class ExperimentRunner:
                 running = set()
                 finished = set()
 
-                # Inner Event Loop
+                # Event loop: drive the schedule once (bounded by the timeout).
                 while True:
                     now = time.time() - run_start
-                    
+
+                    if now >= timeout:
+                        self.log(f"[{self.name}] Timeout ({timeout}s) reached; stopping.")
+                        break
+
                     # 1. Time-based events
                     while curr_schedule and curr_schedule[0][2] <= now:
                         aid, action, _ = curr_schedule.pop(0)
@@ -505,7 +497,7 @@ class ExperimentRunner:
                                         f"Return Code: {proc.returncode}\n"
                                     )
                                     
-                                    # Decodifica STDERR (byte -> string) per sicurezza
+                                    # Decode STDERR (bytes -> string) defensively.
                                     if err:
                                         decoded_err = err.decode('utf-8', errors='replace') if isinstance(err, bytes) else err
                                         error_msg += f"--- STDERR ---\n{decoded_err}\n"
@@ -513,7 +505,7 @@ class ExperimentRunner:
                                     # Decode STDOUT (MPI often prints errors here).
                                     if out:
                                         decoded_out = out.decode('utf-8', errors='replace') if isinstance(out, bytes) else out
-                                        error_msg += f"--- STDOUT TAIL ---\n{decoded_out[-2000:]}\n" # Ultimi 2000 caratteri
+                                        error_msg += f"--- STDOUT TAIL ---\n{decoded_out[-2000:]}\n"  # last 2000 chars
                                     
                                     error_msg += "------------------------------------------------\n"
 
@@ -536,7 +528,7 @@ class ExperimentRunner:
                                     try:
                                         stdout_path = os.path.join(self.exp_dir, f"stdout_app_{aid}.log")
                                         with open(stdout_path, "a") as f:
-                                            f.write(f"=== Run {runs + 1} ===\n{decoded_out}\n")
+                                            f.write(f"=== Output ===\n{decoded_out}\n")
                                     except Exception as e:
                                         print(f"[CINETIC WARNING] Could not write stdout log file: {e}", file=sys.stderr)
 
@@ -573,9 +565,7 @@ class ExperimentRunner:
                             self.data_containers[c_idx].num_samples.append(len(series))
                             c_idx += 1
 
-                runs += 1
-                if runs >= min_runs:
-                    converged = check_CI(self.data_containers, alpha, beta, converge_all, runs)
+                break  # run once — no convergence loop
 
         finally:
             self.teardown()

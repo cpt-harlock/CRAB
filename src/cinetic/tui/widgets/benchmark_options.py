@@ -78,23 +78,8 @@ class BenchmarkOptions(VerticalScroll):
             yield Input(placeholder="e.g., 50:50 or 'e' for even", value="e", id="allocationsplit", classes="option-input")
 
         with Container(classes="option-group"):
-            yield Label("Minimum Runs:", classes="option-label")
-            yield Input(value="10", id="minruns", type="integer", classes="option-input")
-
-            yield Label("Maximum Runs:", classes="option-label")
-            yield Input(value="1000", id="maxruns", type="integer", classes="option-input")
-
-        with Container(classes="option-group"):
             yield Label("Timeout (seconds):", classes="option-label")
             yield Input(value="100.0", id="timeout", type="number", classes="option-input")
-
-        with Container(classes="option-group"):
-            yield Label("Alpha (Confidence):", classes="option-label")
-            yield Input(value="0.05", id="alpha", type="number", classes="option-input")
-            
-        with Container(classes="option-group"):
-            yield Label("Beta (Convergence):", classes="option-label")
-            yield Input(value="0.05", id="beta", type="number", classes="option-input")
 
         with Container(classes="option-group"):
             yield Label("Processes Per Node:", classes="option-label")
@@ -179,10 +164,10 @@ class BenchmarkOptions(VerticalScroll):
 
     def set_state(self, state: dict) -> None:
         """
-        Imposta lo stato del form in base a un dizionario di dati.
+        Set the form state from a dictionary of values.
 
         Args:
-            state: Un dizionario dove le chiavi corrispondono agli ID dei widget.
+            state: A dictionary whose keys correspond to widget IDs.
         """
         if not state:
             return
