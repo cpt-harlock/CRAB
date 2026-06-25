@@ -67,109 +67,110 @@ def prepare_execution_environment(env_dict: Dict[str, str]) -> Dict[str, str]:
         final_env[key] = os.path.expandvars(value)
     return final_env
 
-def run_from_cli():
-    # Seed CINETIC_* from any legacy CRAB_* in the surrounding shell/env.
+def run_worker(work_dir: str) -> int:
+    """Worker mode: load the snapshot in <work_dir> and run the engine in-job."""
+    try:
+        config_file = os.path.join(work_dir, 'config.json')
+        env_file = os.path.join(work_dir, 'environment.json')
+
+        print(f"--- [WORKER MODE] Work dir: {work_dir} ---", flush=True)
+
+        with open(config_file, 'r') as f:
+            benchmark_config = json.load(f)
+
+        # environment.json holds the env vars resolved by the orchestrator.
+        with open(env_file, 'r') as f:
+            execution_env = json.load(f)
+
+        # Legacy snapshots (older runs) may carry CRAB_* keys; mirror them.
+        apply_legacy_env(execution_env)
+
+        print("--- [WORKER] Environment loaded. Starting engine. ---", flush=True)
+
+        start = time.time()
+        engine = Engine(log_callback=print)
+        engine.run(
+            config=benchmark_config,
+            environment=execution_env,
+            is_worker=True,
+            output_dir=work_dir,
+        )
+        total = timedelta(seconds=int(time.time() - start))
+        print("--- [WORKER] Engine run finished. ---", flush=True)
+        print(f"--- Took: {total} ---", flush=True)
+        return 0
+    except Exception as e:
+        print(f"[WORKER FATAL ERROR] {e}", file=sys.stderr, flush=True)
+        import traceback
+        traceback.print_exc()
+        return 1
+
+
+def orchestrate_main(argv=None) -> int:
+    """Orchestrator mode: resolve a preset + config and submit a Slurm job."""
     apply_legacy_env()
 
-    # --- WORKER MODE ---
+    parser = argparse.ArgumentParser(
+        prog="cinetic run", description="CINETIC Benchmarking Orchestrator.")
+    parser.add_argument("-c", "--config", dest="app_config_file", required=True,
+                        help="Path to the JSON benchmark config.")
+    parser.add_argument("-p", "--preset", help="Name of the preset to use.")
+    args = parser.parse_args(argv)
+
+    try:
+        selected_preset = args.preset or os.environ.get("CINETIC_PRESET")
+        if os.path.exists(".env") and not selected_preset:
+            with open(".env", "r") as f:
+                selected_preset = f.read().strip()
+
+        if not selected_preset:
+            selected_preset = "local"
+
+        # 1. Load the structured preset config (env, sbatch, header).
+        preset_config = load_environment_config(selected_preset)
+
+        # 2. Resolve the environment variables (expand __CWD__ etc).
+        execution_env = prepare_execution_environment(preset_config["env"])
+
+        # 3. Load the experiment config.
+        with open(args.app_config_file, 'r') as f:
+            benchmark_config = json.load(f)
+
+        # 4. Inject system sbatch/header so the Engine can reach them.
+        if "global_options" not in benchmark_config:
+            benchmark_config["global_options"] = {}
+
+        benchmark_config["global_options"]["system_sbatch"] = preset_config["sbatch"]
+        benchmark_config["global_options"]["system_header"] = preset_config["header"]
+
+        print("-" * 50)
+        print(f"Starting the engine with preset '{selected_preset}'...")
+        print("-" * 50)
+
+        engine = Engine(log_callback=print)
+        engine.run(config=benchmark_config, environment=execution_env,
+                   is_worker=False)
+
+        print("-" * 50)
+        print("Orchestration complete. Job submitted to SLURM.")
+        print("-" * 50)
+        return 0
+    except Exception as e:
+        print(f"[ORCHESTRATOR FATAL ERROR] {e}", file=sys.stderr)
+        import traceback
+        traceback.print_exc()
+        return 1
+
+
+def run_from_cli():
+    """Backward-compatible entry point used by the legacy cli.py / tui.py shims.
+
+    Dispatches by sniffing the historical ``--worker``/``--workdir`` argv; new
+    code paths use the explicit ``cinetic run`` / ``cinetic _worker``
+    subcommands (see cinetic.__main__).
+    """
+    apply_legacy_env()
     if "--worker" in sys.argv:
-        try:
-            workdir_index = sys.argv.index("--workdir") + 1
-            work_dir = sys.argv[workdir_index]
-
-            config_file = os.path.join(work_dir, 'config.json')
-            env_file = os.path.join(work_dir, 'environment.json')
-
-            print(f"--- [WORKER MODE DETECTED] Work dir: {work_dir} ---", flush=True)
-
-            with open(config_file, 'r') as f:
-                benchmark_config = json.load(f)
-            
-            # NOTA: environment.json ora contiene solo le ENV vars processate dall'orchestrator
-            with open(env_file, 'r') as f:
-                execution_env = json.load(f)
-
-            # Legacy snapshots (older runs) may carry CRAB_* keys; mirror them.
-            apply_legacy_env(execution_env)
-
-            print(f"--- [WORKER] Environment loaded. Starting engine. ---", flush=True)
-
-
-            # Time execution
-            start = time.time()
-
-            engine = Engine(log_callback=print)
-            engine.run(
-                config=benchmark_config, 
-                environment=execution_env,
-                is_worker=True,
-                output_dir=work_dir
-            )
-
-            elapsed_time = time.time() - start
-            total = timedelta(seconds=int(elapsed_time))
-
-            print(f"--- [WORKER] Engine run finished. ---", flush=True)
-            print(f"--- Took: " + str(total) + " ---", flush=True)
-
-        except Exception as e:
-            print(f"[WORKER FATAL ERROR] {e}", file=sys.stderr, flush=True)
-            import traceback
-            traceback.print_exc()
-            sys.exit(1)
-    
-    # --- ORCHESTRATOR MODE ---
-    else:
-        parser = argparse.ArgumentParser(description="CINETIC Benchmarking Orchestrator.")
-        parser.add_argument("-c", "--config", dest="app_config_file", required=True, help="Path to the JSON benchmark config.")
-        parser.add_argument("-p", "--preset", help="Name of the preset to use.")
-        parser.add_argument("--worker", action="store_true", help=argparse.SUPPRESS)
-        args = parser.parse_args()
-
-        try:
-            selected_preset = args.preset or os.environ.get("CINETIC_PRESET")
-            if os.path.exists(".env") and not selected_preset:
-                with open(".env", "r") as f:
-                    selected_preset = f.read().strip()
-            
-            if not selected_preset:
-                selected_preset = "local"
-
-            # 1. Carica la configurazione strutturata (Env, Sbatch, Header)
-            preset_config = load_environment_config(selected_preset)
-            
-            # 2. Prepara le variabili d'ambiente (risolve __CWD__ etc)
-            execution_env = prepare_execution_environment(preset_config["env"])
-            
-            # 3. Carica il config dell'esperimento
-            with open(args.app_config_file, 'r') as f:
-                benchmark_config = json.load(f)
-
-            # 4. Inietta le configurazioni di sistema nelle global_options del benchmark
-            # Questo permette all'Engine di accedere a sbatch/header di sistema
-            if "global_options" not in benchmark_config:
-                benchmark_config["global_options"] = {}
-            
-            benchmark_config["global_options"]["system_sbatch"] = preset_config["sbatch"]
-            benchmark_config["global_options"]["system_header"] = preset_config["header"]
-
-            print("-" * 50)
-            print(f"Avvio del motore con il preset '{selected_preset}'...")
-            print("-" * 50)
-
-            engine = Engine(log_callback=print)
-            engine.run(
-                config=benchmark_config, 
-                environment=execution_env,
-                is_worker=False
-            )
-
-            print("-" * 50)
-            print("Orchestration complete. Job submitted to SLURM.")
-            print("-" * 50)
-
-        except Exception as e:
-            print(f"[ORCHESTRATOR FATAL ERROR] {e}", file=sys.stderr)
-            import traceback
-            traceback.print_exc()
-            sys.exit(1)
+        idx = sys.argv.index("--workdir") + 1
+        sys.exit(run_worker(sys.argv[idx]))
+    sys.exit(orchestrate_main())

@@ -21,6 +21,9 @@ dependencies = [
     "rich>=14.1.0",
 ]
 
+[project.scripts]
+cinetic = "cinetic.__main__:main"
+
 [project.optional-dependencies]
 tui = [
     "textual>=6.1.0",
@@ -32,10 +35,6 @@ analysis = [
 dev = [
     "cinetic[tui,analysis]",
 ]
-
-# Console entrypoints are introduced in phase P4 (unified `cinetic` CLI):
-#   [project.scripts]
-#   cinetic = "cinetic.__main__:main"
 
 [tool.setuptools]
 # src/ layout; auto-discovery finds the package under src/ (currently `crab`,

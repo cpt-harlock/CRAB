@@ -771,7 +771,12 @@ class Engine:
         sbatch_headers = self._generate_sbatch_header(g_opts, data_directory)
 
         script_path = os.path.join(data_directory, 'cinetic_job.sh')
-        cmd = f"{sys.executable} {os.path.abspath(sys.argv[0])} --worker --workdir {data_directory}"
+        # Re-invoke the worker through the unified CLI's hidden subcommand. Using
+        # the package __main__ as a file keeps this independent of how the
+        # orchestrator was launched (console script, -m, or a top-level shim).
+        worker_entry = os.path.abspath(
+            os.path.join(os.path.dirname(__file__), "..", "__main__.py"))
+        cmd = f"{sys.executable} {worker_entry} _worker --workdir {data_directory}"
         
         with open(script_path, 'w') as f:
             f.write("#!/bin/bash\n\n")
