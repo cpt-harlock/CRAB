@@ -57,10 +57,7 @@ tests/                        # Standalone-runnable tests (no pytest dep) + fixt
     "partitionsplit": "50:50",
     "allocationsplit": "100-100",
     "partitionlayout": "l",         // l=linear, i=interleaved
-    "minruns": "5", "maxruns": "20",
-    "timeout": "1200.0",
-    "alpha": "0.05", "beta": "0.05",
-    "convergeall": false,
+    "timeout": "1200.0",            // wall-clock cap on the single run
     "outformat": "csv",
     "name": "optional_run_name",
     "walltime": "00:30:00",
@@ -96,7 +93,10 @@ class app(base):
         # parse self.stdout, return list-of-lists (one per metadata entry)
         ...
 ```
-`conv: True` = this metric is used for convergence checking (CI-based).
+`conv` is retained on metadata for compatibility but is currently inert:
+convergence-based stopping has been removed, so each experiment runs exactly
+once (bounded by `timeout`). Legacy configs may still carry `minruns`/`maxruns`/
+`alpha`/`beta`/`convergeall`; they are ignored.
 
 ## Topology (network-aware node selection)
 
@@ -148,15 +148,23 @@ Each preset has three sections:
 
 `_common` is merged first; preset-specific values override it.
 
-Active presets: `local`, `leonardo`, `alps`, `lumi`, `cluster_di`, `haicgu`, `nanjin`, `slimfly`.
+Active presets: `local`, `leonardo` (plus the `example_preset` template).
 
-Key env vars used by wrappers/engine:
-- `CINETIC_ROOT` — repo root
+Key env vars actually read by the engine/CLI:
+- `CINETIC_ROOT` — repo root (used by every wrapper's `get_binary_path`)
 - `CINETIC_WRAPPERS_PATH` — path searched for relative wrapper paths
 - `CINETIC_WL_MANAGER` — `slurm` or `mpi`
-- `CINETIC_MPIRUN` — mpirun/srun executable
-- `CINETIC_PINNING_FLAGS`, `CINETIC_MPIRUN_ADDITIONAL_FLAGS`
-- `CINETIC_GPU_BENCH`, `CINETIC_XCCL_BENCH` — feature flags for GPU/NCCL wrappers
+- `CINETIC_PINNING_FLAGS` — CPU-binding flags (read by both backends)
+- `CINETIC_MPIRUN`, `CINETIC_MPIRUN_MAP_BY_NODE_FLAG`,
+  `CINETIC_MPIRUN_HOSTNAMES_FLAG`, `CINETIC_MPIRUN_ADDITIONAL_FLAGS` — used by
+  the `mpi` backend only (the `slurm` backend invokes `srun` directly)
+
+Framework-managed (not user-set): `CINETIC_SYSTEM` (from the preset name),
+`CINETIC_PRESET` (preset selector), `CINETIC_NODE_RESULTS_DIR` (set per
+experiment by the engine). A handful of benchmark wrappers read their own path
+vars on demand (e.g. `CINETIC_MINIFE_PATH`, `CINETIC_G500_PATH`,
+`CINETIC_AMG_PATH`, `CINETIC_IB_DEVICES`); set those only when running the
+corresponding benchmark.
 
 ## Output
 
