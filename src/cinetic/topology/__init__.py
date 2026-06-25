@@ -1,4 +1,4 @@
-"""Topology-aware node selection support for CRAB.
+"""Topology-aware node selection support for CINETIC.
 
 Parses ``ibnetdiscover`` output into a neutral, serializable representation
 (see :mod:`cinetic.topology.model`) that downstream tooling -- such as the TUI

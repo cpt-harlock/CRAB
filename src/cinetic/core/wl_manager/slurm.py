@@ -26,25 +26,24 @@ class wl_manager:
         node_list_string = ','.join(node_list)
         node_list_arg = '--nodelist ' + node_list_string
 
-        # --- LOGICA DEL WRAPPER ---
+        # --- Wrapper logic ---
         if pre_commands and len(pre_commands) > 0:
-            # 1. Silenziamo ogni comando preliminare
-            #    Aggiungiamo ' >/dev/null 2>&1' a ciascun comando dell'header
-            #    Questo butta via sia stdout che stderr dei moduli.
-            #    Se vuoi vedere gli errori ma non l'output, usa solo ' >/dev/null'
+            # 1. Silence each preliminary command by appending ' >/dev/null 2>&1'
+            #    to every header command. This discards both stdout and stderr of
+            #    the modules. To see errors but not output, use only ' >/dev/null'.
             silenced_pre_commands = [f"{c} >/dev/null 2>&1" for c in pre_commands]
-            
-            # 2. Uniamo i comandi silenziati e il comando finale con '&&'
-            #    Nota: cmd (l'app) NON viene silenziato, perché ci serve il suo output!
+
+            # 2. Join the silenced commands and the final command with '&&'.
+            #    Note: cmd (the app) is NOT silenced — we need its output!
             full_sequence = " && ".join(silenced_pre_commands + [cmd])
-            
-            # 3. Escaping delle virgolette singole per sicurezza dentro bash -c '...'
+
+            # 3. Escape single quotes for safety inside bash -c '...'.
             safe_sequence = full_sequence.replace("'", "'\\''")
-            
-            # 4. Avvolgiamo tutto in bash -c
+
+            # 4. Wrap everything in bash -c.
             final_cmd = f"bash -c '{safe_sequence}'"
         else:
-            # Nessun pre-comando, esecuzione diretta (Legacy/Simple mode)
+            # No pre-commands, run directly (legacy/simple mode).
             final_cmd = cmd
         # --------------------------
 
@@ -54,7 +53,7 @@ class wl_manager:
             self.ctx.pinning_flags + ' ' +
             '-n ' + str(ppn * num_nodes) + ' ' +
             '-N ' + str(num_nodes) + ' ' +
-            final_cmd  # Usiamo il comando calcolato (wrapped o raw)
+            final_cmd  # the computed command (wrapped or raw)
         ).strip() 
 
         print("[DEBUG]: SLURM command is: " + slurm_string)

@@ -1,9 +1,9 @@
-# 🦀 C.R.A.B (Co-Running Applications Benchmarking framework)
+# ⚡ CINETIC — Co-running INterference & nEtwork-Topology Investigation for Clusters
 [![Python Version](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Build Status](https://img.shields.io/badge/build-passing-brightgreen)](https://github.com/actions)
 
-**CRAB** is a flexible and powerful framework for executing, collecting, and analyzing high-performance benchmarks (HPC), optimized for clusters managed by **Slurm**. It allows you to orchestrate combinations of applications, manage system-specific environments, and automate the entire benchmarking process.
+**CINETIC** is a flexible and powerful framework for executing, collecting, and analyzing high-performance benchmarks (HPC), optimized for clusters managed by **Slurm**. It allows you to orchestrate combinations of applications, manage system-specific environments, and automate the entire benchmarking process — with a focus on studying **network congestion** caused by co-running applications (victims vs. aggressors).
 
 ![asciicast](https://user-images.githubusercontent.com/11363902/203875389-918931a5-e110-4107-8854-c8c3656ab3e2.gif)
 
@@ -67,23 +67,23 @@
     ```json
     {
         "_common": {
-            "CRAB_ROOT": "/absolute/path/to/crab"
+            "CINETIC_ROOT": "/absolute/path/to/crab"
         },
         "my_cluster": {
-            "CRAB_WL_MANAGER": "slurm",
-            "CRAB_CC": "mpicc",
-            "CRAB_PINNING_FLAGS": "--cpu-bind=core"
+            "CINETIC_WL_MANAGER": "slurm",
+            "CINETIC_CC": "mpicc",
+            "CINETIC_PINNING_FLAGS": "--cpu-bind=core"
         },
         "local_pc": {
-            "CRAB_WL_MANAGER": "mpi",
-            "CRAB_MPIRUN": "mpirun"
+            "CINETIC_WL_MANAGER": "mpi",
+            "CINETIC_MPIRUN": "mpirun"
         }
     }
     ```
 
 ## 🕹️ Using the Framework
 
-You can interact with CRAB in two ways: through the TUI or the CLI.
+You can interact with CINETIC in two ways: through the TUI or the CLI.
 
 ### TUI Mode (Interactive)
 
@@ -133,7 +133,7 @@ The framework is designed with a clear separation of responsibilities:
    * Application scheduling.
    * Benchmark process launching through the workload manager.
    * Completion monitoring, data collection, and convergence checking.
-3. **Workload Manager (`src/crab/core/wl_manager/*.py`)**: Specialized modules that translate a request ("run this command on these nodes") into system-specific commands (e.g., `srun, mpirun ...`).
+3. **Workload Manager (`src/cinetic/core/wl_manager/*.py`)**: Specialized modules that translate a request ("run this command on these nodes") into system-specific commands (e.g., `srun, mpirun ...`).
 4. **Application Wrappers (`wrappers/*.py`)**: Small Python modules that "wrap" a specific benchmark, teaching the framework how to run it and interpret its output.
 
 ## 🧩 Adding a New Benchmark
@@ -177,7 +177,7 @@ Your `app` class must implement a few key methods:
    ```python
    def get_binary_path(self):
        # You can use environment variables from presets for flexibility
-       return os.environ["CRAB_ROOT"] + "/path/to/my/executable"
+       return os.environ["CINETIC_ROOT"] + "/path/to/my/executable"
    ```
 
 3. **`read_data(self)`**: The most important method. It must parse the benchmark output (`self.stdout`) and return the collected data.

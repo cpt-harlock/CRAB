@@ -2,31 +2,30 @@ from textual.message import Message
 
 class SaveConfiguration(Message):
     """
-    Messaggio inviato quando l'utente richiede di salvare la configurazione.
-    
-    Questo messaggio segnala all'applicazione principale di raccogliere lo stato
-    da tutti i componenti rilevanti (Application Forms, Benchmark Options, etc.)
-    e di avviare il processo di salvataggio su file.
+    Sent when the user requests to save the configuration.
+
+    Signals the main application to collect the state from all relevant
+    components (Application Forms, Benchmark Options, etc.) and start the
+    save-to-file process.
     """
     pass
 
 class LoadConfiguration(Message):
     """
-    Messaggio inviato quando l'utente richiede di caricare una configurazione.
+    Sent when the user requests to load a configuration.
 
-    Questo messaggio segnala all'applicazione principale di mostrare un selettore
-    di file e, una volta scelto il file, di caricare i dati e distribuirli
-    ai componenti TUI appropriati.
+    Signals the main application to show a file picker and, once a file is
+    chosen, load the data and distribute it to the appropriate TUI components.
     """
     pass
 
 class RunBenchmark(Message):
     """
-    Messaggio inviato quando l'utente preme il pulsante per avviare il benchmark.
+    Sent when the user presses the button to start the benchmark.
 
-    Questo messaggio avvia la sequenza di esecuzione del benchmark, che include:
-    1. Raccolta di tutti i dati dalla TUI.
-    2. Passaggio alla vista dei log.
-    3. Avvio del processo di benchmark in background.
+    Starts the benchmark run sequence, which includes:
+    1. Collecting all data from the TUI.
+    2. Switching to the log view.
+    3. Starting the benchmark process in the background.
     """
     pass

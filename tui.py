@@ -1,14 +1,14 @@
 import os
 import sys
 
-# Aggiunge la directory 'src' al path di Python per trovare il pacchetto 'cinetic'
+# Add the 'src' directory to the Python path so the 'cinetic' package is found.
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), 'src')))
 
 if __name__ == "__main__":
-    # Quando il job SLURM viene lanciato, l'Engine ricostruisce il comando del worker
-    # come "<python> <sys.argv[0]> --worker --workdir ...". Se la TUI è stata l'entry
-    # point, sys.argv[0] è questo file: in worker mode NON dobbiamo riavviare la TUI
-    # (che renderebbe codici ANSI nei log), ma eseguire la logica del worker.
+    # Backward-compat: an older engine could re-invoke the worker as
+    # "<python> <sys.argv[0]> --worker --workdir ...". If the TUI was the entry
+    # point, sys.argv[0] is this file, so in worker mode we must NOT relaunch the
+    # TUI (which would render ANSI codes into the logs) but run the worker logic.
     if "--worker" in sys.argv:
         from cinetic.cli.orchestrator import run_from_cli
         run_from_cli()

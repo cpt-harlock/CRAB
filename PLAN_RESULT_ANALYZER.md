@@ -41,7 +41,7 @@ fences):
   so the parser works with or without fences.
 
 ### 1.2 Topology file (`topologies/leonardo.json`, etc.)
-Loaded via the existing model: `src/crab/topology/model.py` →
+Loaded via the existing model: `src/cinetic/topology/model.py` →
 `Topology.load(path)`. Gives us:
 - `Topology.locality(host_a, host_b)` → `Locality.{SAME_SWITCH, SAME_CELL, CROSS_CELL}`
   (or `None` if a host is unknown). This is the **distance** between a pair.
@@ -255,10 +255,10 @@ One multi-panel summary figure (`overview.png`) plus the individual PNGs.
 ## 7. CLI & structure
 
 New script `tournament_analyzer.py` at repo root (sibling of `blink_plotter.py`),
-backed by a package `src/crab/analysis/` so logic is importable/testable:
+backed by a package `src/cinetic/analysis/` so logic is importable/testable:
 
 ```
-src/crab/analysis/
+src/cinetic/analysis/
   __init__.py
   parse.py      # node-CSV -> Sample/Match/Round model (format-tolerant, §1.1/§2)
   params.py     # resolve msg_size/window/granularity (§1.3) from CLI/config/defaults

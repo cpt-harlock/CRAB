@@ -1,44 +1,51 @@
-# CRAB — Claude Code Context
+# CINETIC — Claude Code Context
 
 ## What this project is
 
-**CRAB** (Co-Running Applications Benchmarking) is an HPC benchmarking framework for running, measuring, and analyzing MPI collective benchmarks on Slurm-managed clusters. Its primary use case is studying **network congestion** caused by co-running applications (victims vs. aggressors) on systems like Leonardo @ CINECA.
+**CINETIC** (Co-running INterference & nEtwork-Topology Investigation for Clusters) is an HPC benchmarking framework for running, measuring, and analyzing MPI collective benchmarks on Slurm-managed clusters. Its primary use case is studying **network congestion** caused by co-running applications (victims vs. aggressors) on systems like Leonardo @ CINECA. (Formerly named CRAB; see `PLAN_CINETIC_REFACTOR.md` for the rebrand/refactor.)
 
 ## How to run
 
 ```bash
-# CLI (orchestrator mode — submits a Slurm job)
+# Unified CLI (preferred): `cinetic <command>`
+cinetic run -p <preset> -c <config.json>   # orchestrate — submits a Slurm job
+cinetic tui                                # interactive TUI
+cinetic analyze <run_dir|exp_dir> --topology topologies/leonardo.json --json
+cinetic topo <ibnetdiscover.txt> -o topology.json
+cinetic plot                               # blink result plots
+
+# Legacy entry scripts still work as thin shims:
 python cli.py -p <preset> -c <config.json>
-
-# TUI (interactive)
 python tui.py
-
-# Plot results
-python blink_plotter.py
-
-# Analyze tournament_nb per-node results (bandwidth/latency + topology distance)
 python tournament_analyzer.py <run_dir|exp_dir> --topology topologies/leonardo.json --json
 ```
 
-The preset can also be set via a `.env` file (single line: preset name) or `CRAB_PRESET` env var. Default is `local`.
+`cinetic` is the console entry point (`pip install -e .[tui,analysis]`), dispatching
+to `src/cinetic/__main__.py`. The worker stage runs inside the Slurm job via the
+hidden `cinetic _worker --workdir <dir>` subcommand.
+
+The preset can also be set via a `.env` file (single line: preset name) or `CINETIC_PRESET` env var. Default is `local`. Legacy `CRAB_*` env vars are still read (mirrored to `CINETIC_*`) via `src/cinetic/compat.py`.
 
 ## Architecture
 
 ```
-cli.py / tui.py               # Entrypoints — collect config, set env, call Engine
-src/crab/cli/orchestrator.py  # Preset loading, env merging, SBATCH generation → Engine
-src/crab/core/engine.py       # Core: NodeAllocator, ExperimentRunner, Engine
-src/crab/core/models.py       # AppConfig / BenchmarkState dataclasses (used by TUI)
-src/crab/core/wl_manager/     # Workload manager backends: slurm.py, mpi.py
-src/crab/topology/            # ibnetdiscover parser → neutral topology JSON (model.py, parser.py)
-src/crab/analysis/            # tournament_nb result analyzer (parse/params/metrics/topo/outliers/report_*)
+cli.py / tui.py / ...         # Legacy entry shims → the unified CLI
+src/cinetic/__main__.py          # Unified `cinetic` CLI dispatch (run/tui/analyze/topo/plot/_worker)
+src/cinetic/runtime.py           # RuntimeContext: typed front door to the resolved CINETIC_* settings
+src/cinetic/compat.py            # Legacy CRAB_* → CINETIC_* env shim (warns once)
+src/cinetic/cli/orchestrator.py  # Preset loading, env merging, SBATCH generation → Engine
+src/cinetic/core/engine.py       # Core: NodeAllocator, ExperimentRunner, Engine
+src/cinetic/core/models.py       # AppConfig / BenchmarkState dataclasses (used by TUI)
+src/cinetic/core/wl_manager/     # Workload manager backends: slurm.py, mpi.py (take a RuntimeContext)
+src/cinetic/topology/            # ibnetdiscover parser → neutral topology JSON (model.py, parser.py)
+src/cinetic/analysis/            # tournament_nb result analyzer + analysis/cli.py (the `analyze` subcommand)
 wrappers/                     # One .py file per benchmark, all extend wrappers/base.py
 benchmarks/blink/             # C/C++ MPI microbenchmark sources + pre-built bin/
 tests/                        # Standalone-runnable tests (no pytest dep) + fixtures/
 ```
 
 ### Engine execution flow
-1. **Orchestrator mode** (`cli.py`): loads preset → merges env/sbatch/header → injects into config → writes `crab_job.sh` → `sbatch crab_job.sh`
+1. **Orchestrator mode** (`cli.py`): loads preset → merges env/sbatch/header → injects into config → writes `cinetic_job.sh` → `sbatch cinetic_job.sh`
 2. **Worker mode** (inside the Slurm job): reads `config.json` + `environment.json` from the output dir → instantiates `ExperimentRunner` per experiment → runs the event loop → saves CSV results
 
 ### Experiment config format (JSON)
@@ -83,7 +90,7 @@ class app(base):
     metadata = [{"name": "latency", "unit": "s", "conv": True}]
     
     def get_binary_path(self):
-        return os.environ["CRAB_ROOT"] + "/benchmarks/blink/bin/my_bench"
+        return os.environ["CINETIC_ROOT"] + "/benchmarks/blink/bin/my_bench"
     
     def read_data(self):
         # parse self.stdout, return list-of-lists (one per metadata entry)
@@ -93,7 +100,7 @@ class app(base):
 
 ## Topology (network-aware node selection)
 
-`src/crab/topology/` parses `ibnetdiscover` output into a neutral, serializable
+`src/cinetic/topology/` parses `ibnetdiscover` output into a neutral, serializable
 JSON model used for topology-aware node selection (see PLAN.md).
 
 ```bash
@@ -114,7 +121,7 @@ only a **default**: the TUI shows the path in an editable field with a Browse…
 file picker, so the user can load any topology JSON. The TUI
 "Benchmark Options" tab exposes a **Topology Map** node source: the
 **Open Topology Map** button opens a graphical `ModalScreen`
-(`src/crab/tui/widgets/topology_map.py`) where cells → switches → nodes are
+(`src/cinetic/tui/widgets/topology_map.py`) where cells → switches → nodes are
 clickable; the confirmed selection fills the node table and `numnodes`.
 The selection is passed to Slurm as `global_options.nodelist` (list of
 hostnames): the engine emits `#SBATCH --nodelist=<hosts>` and forces `--nodes`
@@ -144,18 +151,18 @@ Each preset has three sections:
 Active presets: `local`, `leonardo`, `alps`, `lumi`, `cluster_di`, `haicgu`, `nanjin`, `slimfly`.
 
 Key env vars used by wrappers/engine:
-- `CRAB_ROOT` — repo root
-- `CRAB_WRAPPERS_PATH` — path searched for relative wrapper paths
-- `CRAB_WL_MANAGER` — `slurm` or `mpi`
-- `CRAB_MPIRUN` — mpirun/srun executable
-- `CRAB_PINNING_FLAGS`, `CRAB_MPIRUN_ADDITIONAL_FLAGS`
-- `CRAB_GPU_BENCH`, `CRAB_XCCL_BENCH` — feature flags for GPU/NCCL wrappers
+- `CINETIC_ROOT` — repo root
+- `CINETIC_WRAPPERS_PATH` — path searched for relative wrapper paths
+- `CINETIC_WL_MANAGER` — `slurm` or `mpi`
+- `CINETIC_MPIRUN` — mpirun/srun executable
+- `CINETIC_PINNING_FLAGS`, `CINETIC_MPIRUN_ADDITIONAL_FLAGS`
+- `CINETIC_GPU_BENCH`, `CINETIC_XCCL_BENCH` — feature flags for GPU/NCCL wrappers
 
 ## Output
 
-Results land under `data/<CRAB_SYSTEM>/<name>_<timestamp>/`:
+Results land under `data/<CINETIC_SYSTEM>/<name>_<timestamp>/`:
 - `config.json`, `environment.json` — reproducibility snapshot
-- `crab_job.sh` — submitted Slurm script
+- `cinetic_job.sh` — submitted Slurm script
 - `slurm_output.log`, `slurm_error.log`
 - `<exp_id>/data_app_<id>.csv` — collected metrics
 - `<exp_id>/error_app_<id>.log` — per-app error logs on non-zero exit
@@ -165,11 +172,11 @@ Results land under `data/<CRAB_SYSTEM>/<name>_<timestamp>/`:
 Analyzes the **per-node CSV dumps** written by `tournament_nb.c`'s
 `write_node_results()` (`<exp_dir>/node_<host>_rank<r>.csv`, columns
 `node,rank,peer_node,peer_rank,sample,duration_s`, `=`-fenced per round).
-Backed by `src/crab/analysis/`: `parse` (format-tolerant: columns by name,
+Backed by `src/cinetic/analysis/`: `parse` (format-tolerant: columns by name,
 blocks by peer-change) → `params` (msg_size/window/granularity from CLI →
 `stdout_app_*.log` header → `config.json` args → C defaults) → `metrics`
 (bandwidth + per-iteration latency, robust stats; pairings merge both endpoints)
-→ `topo` (wraps `crab.topology.model`; normalizes FQDN→short host) → `outliers`
+→ `topo` (wraps `cinetic.topology.model`; normalizes FQDN→short host) → `outliers`
 → `report_text`/`report_plot`.
 
 Reports per-node / per-round / overall **bandwidth** (full-duplex aggregate

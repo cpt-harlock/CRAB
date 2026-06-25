@@ -17,7 +17,7 @@ of four concepts:
 The representation is intentionally decoupled from how it was produced: the
 ``parser`` module fills it from raw ``ibnetdiscover`` output, but the JSON form
 (:meth:`Topology.to_dict` / :meth:`Topology.save`) is the stable interface
-consumed by the rest of CRAB (e.g. the TUI node selector).
+consumed by the rest of CINETIC (e.g. the TUI node selector).
 """
 
 from __future__ import annotations

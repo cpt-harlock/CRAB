@@ -56,7 +56,7 @@ class ApplicationSetup(Container):
 
         self.tab_selector.update_benchmark_tabs(index)
 
-    # MODIFICATO: Logica per aggiungere un nuovo benchmark
+    # Logic to add a new benchmark.
     def add_benchmark(self):
         self.save_current_form_state()
         
@@ -65,15 +65,15 @@ class ApplicationSetup(Container):
             "path": "", "args": "", "collect": False, "start": "", "end": ""
         }
         
-        # NUOVO: Crea la nuova istanza del form
+        # Create the new form instance.
         new_form = ApplicationForm(self.app_ref, benchmark_id=new_index)
-        
-        # NUOVO: Aggiungi il nuovo form alla lista e montalo nel container
+
+        # Add the new form to the list and mount it in the container.
         self.forms_list.append(new_form)
         self.forms_container.mount(new_form)
-        
+
         self.tab_selector.add_benchmark()
-        self.show_benchmark(new_index) # Questo lo renderà visibile e nasconderà gli altri
+        self.show_benchmark(new_index)  # makes it visible and hides the others
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id and event.button.id.startswith("benchmark-"):
@@ -88,38 +88,38 @@ class ApplicationSetup(Container):
         return self.benchmark_states.copy()
 
     async def set_state(self, state: dict):
-        # 1. Pulisce lo stato e l'interfaccia esistenti
+        # 1. Clear the existing state and UI.
         self.benchmark_states.clear()
         self.forms_list.clear()
         await self.forms_container.remove_children()
         await self.tab_selector.clear_benchmark_forms()
 
-        # Se lo stato è vuoto, non fare nulla
+        # If the state is empty, do nothing.
         if not state:
             self.current_benchmark = -1
-            # Potresti voler aggiungere un placeholder qui se necessario
+            # A placeholder could be added here if needed.
             return
 
-        # 2. Carica il nuovo stato e ricostruisce la lista di form
+        # 2. Load the new state and rebuild the list of forms.
         temp_forms_to_mount = []
         for key, value in state.items():
             benchmark_id = int(key)
             self.benchmark_states[benchmark_id] = value
 
-            # Crea un nuovo form, imposta i suoi dati e lo aggiunge alla lista
+            # Create a new form, set its data, and add it to the list.
             new_form = ApplicationForm(app_ref=self.app_ref, benchmark_id=benchmark_id)
             new_form.set_form_data(value)
             self.forms_list.append(new_form)
             temp_forms_to_mount.append(new_form)
 
-        # 3. Ricostruisce le tab e monta tutti i form nel container
+        # 3. Rebuild the tabs and mount all forms in the container.
         for _ in self.benchmark_states:
             self.tab_selector.add_benchmark()
-        
+
         if temp_forms_to_mount:
             await self.forms_container.mount_all(temp_forms_to_mount)
 
-        # 4. Mostra il primo form (o un form di default)
-        self.current_benchmark = -1 # Resetta l'indice per forzare l'aggiornamento
+        # 4. Show the first form (or a default form).
+        self.current_benchmark = -1  # reset the index to force a refresh
         self.show_benchmark(0)
 

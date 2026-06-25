@@ -24,26 +24,26 @@ def load_environment_config(preset_arg: str) -> Dict[str, Any]:
     if preset_arg not in all_presets:
         raise KeyError(f"The preset '{preset_arg}' was not found in {presets_filename}.")
 
-    # Carica _common e il preset specifico
+    # Load _common and the specific preset.
     common_preset = all_presets.get("_common", {})
     target_preset = all_presets[preset_arg]
 
-    # 1. Merge Environment Variables (Dict update)
+    # 1. Merge environment variables (dict update).
     final_env = common_preset.get("env", {}).copy()
     final_env.update(target_preset.get("env", {}))
 
-    # Assicuriamo che CINETIC_SYSTEM sia impostato
+    # Make sure CINETIC_SYSTEM is set.
     if "CINETIC_SYSTEM" not in final_env:
         final_env["CINETIC_SYSTEM"] = preset_arg
 
-    # 2. Merge SBATCH directives (List extend)
-    # L'ordine è: Common -> Preset. (Engine poi aggiungerà Experiment overrides)
+    # 2. Merge SBATCH directives (list extend).
+    # Order: common -> preset. (The Engine then adds experiment overrides.)
     final_sbatch = common_preset.get("sbatch", []) + target_preset.get("sbatch", [])
 
-    # 3. Merge Header commands (List extend)
+    # 3. Merge header commands (list extend).
     final_header = common_preset.get("header", []) + target_preset.get("header", [])
 
-    # Restituiamo una struttura configurata completa
+    # Return a fully configured structure.
     return {
         "env": final_env,
         "sbatch": final_sbatch,
@@ -51,7 +51,7 @@ def load_environment_config(preset_arg: str) -> Dict[str, Any]:
     }
 
 def prepare_execution_environment(env_dict: Dict[str, str]) -> Dict[str, str]:
-    """Processa SOLO le variabili d'ambiente (sostituzione __CWD__ e expandvars)"""
+    """Process ONLY the environment variables (__CWD__ substitution + expandvars)."""
     execution_env = os.environ.copy()
     processed_env = {}
     

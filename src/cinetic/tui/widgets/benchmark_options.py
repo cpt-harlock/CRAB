@@ -19,7 +19,7 @@ class BenchmarkOptions(VerticalScroll):
         self.selected_nodes: list[str] = []
 
     def on_mount(self) -> None:
-        """Imposta il titolo del bordo quando il widget viene montato."""
+        """Set the border title when the widget is mounted."""
         self.border_title = "Benchmark Configuration"
 
         data_table = self.query_one("#node_table", DataTable)
@@ -32,9 +32,9 @@ class BenchmarkOptions(VerticalScroll):
 
 
     def compose(self):
-        """Crea i widget figli per il form delle opzioni."""
+        """Create the child widgets for the options form."""
 
-        # --- Argomenti Posizionali Obbligatori ---
+        # --- Required positional arguments ---
         with Container(classes="option-group"):
             yield Label("Nodes:", classes="option-label")
             yield Select([
@@ -139,14 +139,14 @@ class BenchmarkOptions(VerticalScroll):
 
     def get_state(self) -> dict:
         """
-        Raccoglie lo stato corrente di tutte le opzioni di benchmark.
+        Collect the current state of all benchmark options.
 
         Returns:
-            Un dizionario con l'ID di ogni widget come chiave e il suo valore.
+            A dictionary with each widget's ID as the key and its value.
         """
         state = {}
         for widget in self.query(".option-input"):
-            # Usiamo l'ID del widget come chiave per lo stato
+            # Use the widget's ID as the state key.
             if widget.id:
                 state[widget.id] = widget.value
 

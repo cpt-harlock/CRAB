@@ -79,7 +79,7 @@ class EnvironmentSettings(Container):
         common_data = self.presets.get("_common", {})
         preset_data = self.presets.get(name, {})
 
-        # Helper per gestire la retrocompatibilità (se il json è vecchio/piatto)
+        # Helper to handle backward compatibility (if the json is old/flat).
         def get_env(data): return data.get("env", data) if "env" in data else data
         def get_list(data, key): return data.get(key, [])
 
@@ -90,11 +90,9 @@ class EnvironmentSettings(Container):
             if isinstance(value, str): # Safety check
                 container.mount(VariableRow(key, value))
 
-        # 2. Load SBATCH & HEADER (Direct load, logicamente separiamo common e preset nell'UI? 
-        # Per semplicità di editing, mostriamo l'unione modificabile o solo quelli del preset?
-        # DECISIONE: In Custom Mode si edita tutto. In Read Mode mostriamo tutto.)
-        
-        # Nota: Qui mostriamo la lista completa flatten per semplicità di editing
+        # 2. Load SBATCH & HEADER. For editing simplicity we show the full,
+        # flattened union of common + preset (everything is editable in Custom
+        # mode).
         full_sbatch = get_list(common_data, "sbatch") + get_list(preset_data, "sbatch")
         full_header = get_list(common_data, "header") + get_list(preset_data, "header")
 
@@ -121,43 +119,42 @@ class EnvironmentSettings(Container):
             "header": header_list
         }
 
-    # Metodo pubblico chiamato da App.py per ottenere lo stato completo
-    # (env + sbatch + header), così le direttive SBATCH/header inserite
-    # nella UI vengono propagate al config e finiscono nel job file.
+    # Public method called by app.py to get the full state (env + sbatch +
+    # header), so the SBATCH/header directives entered in the UI are propagated
+    # to the config and end up in the job file.
     def get_full_state(self) -> dict:
         return self._gather_current_state()
 
-    # Metodo pubblico chiamato da App.py al caricamento di una config,
-    # per ripopolare le aree SBATCH/Header con i valori salvati.
+    # Public method called by app.py when loading a config, to repopulate the
+    # SBATCH/Header areas with the saved values.
     def set_sbatch_header(self, sbatch_list: list, header_list: list) -> None:
         self.query_one("#sbatch_area", TextArea).text = "\n".join(sbatch_list or [])
         self.query_one("#header_area", TextArea).text = "\n".join(header_list or [])
 
-    # Metodo pubblico chiamato da App.py per ottenere la config completa
+    # Public method called by app.py to get the full config.
     @property
     def current_env_dict(self) -> dict:
-        # Nota: App.py si aspetta un dizionario piatto per os.environ nell'uso legacy,
-        # MA noi abbiamo aggiornato orchestrator.py per gestire la struttura.
-        # Tuttavia, App.py potrebbe usare questo per la visualizzazione immediata.
-        # Ritorniamo la struttura completa. App.py dovrà essere aggiornato se si aspetta solo env.
-        return self._gather_current_state()["env"] 
+        # Legacy callers expect a flat dict for os.environ, but the orchestrator
+        # now handles the structured form. We return only the env section here;
+        # callers that need sbatch/header use get_full_state().
+        return self._gather_current_state()["env"]
 
-    # Metodo per salvare il preset custom
+    # Save the current settings as a custom preset.
     def save_custom_preset(self):
         name_input = self.query_one("#custom_preset_name", Input)
         new_name = name_input.value.strip()
         if not new_name or new_name == "Custom": return
-        
-        # Salviamo la struttura completa
+
+        # Save the full structure.
         self.presets[new_name] = self._gather_current_state()
         self._save_presets()
         # ... update UI options ...
         self.app.notify(f"Preset '{new_name}' saved.")
 
     def _notify_change(self):
-         # Manda solo la parte ENV perché EnvironmentSettings.EnvChanged è usato per 
-         # aggiornare variabili globali che forse servono ad altro.
-         # Se serve tutto, bisognerebbe aggiornare il messaggio EnvChanged.
+         # Send only the ENV part: EnvChanged is used to update global variables
+         # that other components may need. If everything is required, the
+         # EnvChanged message would need to be extended.
          self.post_message(self.EnvChanged(self.current_env_dict))
 
     # Event Handlers (Button presses, Select changes) rimangono simili ma chiamano load_preset/save_custom

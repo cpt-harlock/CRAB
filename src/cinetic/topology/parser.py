@@ -1,4 +1,4 @@
-"""Parse ``ibnetdiscover`` output into CRAB's neutral topology representation.
+"""Parse ``ibnetdiscover`` output into CINETIC's neutral topology representation.
 
 Usage (as a script)::
 
@@ -220,7 +220,7 @@ def parse_ibnetdiscover(path: Union[str, Path]) -> Topology:
 
 def main(argv: List[str] = None) -> int:
     parser = argparse.ArgumentParser(
-        description="Parse ibnetdiscover output into CRAB's neutral topology JSON."
+        description="Parse ibnetdiscover output into CINETIC's neutral topology JSON."
     )
     parser.add_argument("input", help="Path to ibnetdiscover output file.")
     parser.add_argument(

@@ -28,9 +28,9 @@ class wl_manager:
         node_list_string=','.join(node_list)
 
         # --- WRAPPER LOGIC ---
-        # Se ci sono comandi preliminari (es. 'module load openmpi'), li eseguiamo
-        # prima del comando dell'app su ogni rank, silenziando il loro output ma
-        # mantenendo quello dell'app (che ci serve per le misure).
+        # If there are preliminary commands (e.g. 'module load openmpi'), run them
+        # before the app command on each rank, silencing their output but keeping
+        # the app's output (which we need for the measurements).
         if pre_commands and len(pre_commands) > 0:
             silenced_pre_commands = [f"{c} >/dev/null 2>&1" for c in pre_commands]
             full_sequence = " && ".join(silenced_pre_commands + [cmd])

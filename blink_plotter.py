@@ -330,16 +330,16 @@ def DrawIterationsPlot(data, name):
     #ax1.set_title(f'{name}', fontsize=45, pad=30)
 
     # Show legend and layout
-    # Filtra legenda: solo cluster_collective unici + linea teorica
+    # Filter the legend: only unique cluster_collective entries + theoretical line
 
     ax1.legend(
         fontsize=45,           # grandezza testo etichette
         loc='upper center',
-        bbox_to_anchor=(0.5, -0.2),  # più spazio sotto
+        bbox_to_anchor=(0.5, -0.2),  # more space below
         ncol=2,
         frameon=True,
         title=None,
-        markerscale=2.0        # ingrandisce i marker nella legenda
+        markerscale=2.0        # enlarge the markers in the legend
     )
     plt.tight_layout()
 
@@ -501,7 +501,7 @@ def LoadData_LUMI_ONLY(data, data_folder, systems, collectives, messages, nodes)
             if (collective not in collectives):
                 continue
 
-            #forse è qui il problema
+            # maybe the problem is here
 
             nodes_for_bw = int(data_nodes) / 2
             # print(f"Processing path: {path}, system: {system}, collective: {collective}, nodes: {data_nodes}")
@@ -615,7 +615,7 @@ def LoadData(data, data_folder, systems, collectives, messages, nodes):
             if (collective not in collectives):
                 continue
 
-            #forse è qui il problema
+            # maybe the problem is here
 
             nodes_for_bw = int(data_nodes) / 2
             print(f"Processing path: {path}, system: {system}, collective: {collective}, nodes: {data_nodes}")

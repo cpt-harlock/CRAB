@@ -2,7 +2,7 @@ import os
 import threading
 from typing import Callable, Dict
 
-# Importa il motore e i modelli dalla nuova posizione
+# Import the engine and the models from the package.
 from ..core.engine import Engine
 from ..core.models import BenchmarkState
 
@@ -34,14 +34,14 @@ class TUIController:
         self.log("[bold blue]Preparing to run benchmark...[/]")
         
         try:
-            # 1. Prepara l'ambiente
+            # 1. Prepare the environment.
             execution_env = self._prepare_environment(tui_settings, selected_preset)
             self.log("Environment prepared.")
 
-            # 2. Istanzia ed esegui il motore
+            # 2. Instantiate and run the engine.
             self.log("[bold red]Starting benchmark engine...[/]")
             engine = Engine(log_callback=self.log)
-            # NOTA: il motore non ha più bisogno di un file di config, passiamo il dizionario
+            # The engine no longer needs a config file; we pass the dict directly.
             engine.run(
                 config=benchmark_config, 
                 environment=execution_env,

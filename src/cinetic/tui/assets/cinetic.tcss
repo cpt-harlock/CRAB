@@ -247,11 +247,11 @@ VariableRow {
 }
 
 VariableRow > Input {
-    margin: 0; /* Azzera il margine verticale per allineare gli input */
+    margin: 0; /* zero the vertical margin to align the inputs */
 }
 
 VariableRow > .variable_value {
-    margin-left: 1; /* Mantiene un po' di spazio tra i due input */
+    margin-left: 1; /* keep some space between the two inputs */
 }
 
 .variable_key {
@@ -272,18 +272,18 @@ VariableRow > .variable_value {
 
 /* Benchmark Setup   */
 
-/* Stile per il container principale del form */
+/* Style for the form's main container */
 BenchmarkOptions {
     layout: vertical;
-    overflow-y: auto;  /* Permette lo scorrimento verticale */
+    overflow-y: auto;  /* allow vertical scrolling */
     overflow-x: hidden;
     padding: 1 2;
-    
+
     height: 100%;
 
 }
 
-/* Stile per il titolo principale del form */
+/* Style for the form's main title */
 #benchmark-options-title {
     content-align: center middle;
     width: 100%;
@@ -291,19 +291,19 @@ BenchmarkOptions {
     text-style: bold underline;
 }
 
-/* 
- * Container per ogni singola opzione (Label + Input).
+/*
+ * Container for each single option (Label + Input).
  */
 .option-group {
     layout: horizontal;
     height: auto;
     margin-bottom: 1;
 
-    /* MODIFICA CHIAVE: Allinea verticalmente gli elementi al centro */
+    /* KEY: vertically center the elements */
     align-vertical: middle;
 }
 
-/* Stile per tutte le etichette delle opzioni */
+/* Style for all option labels */
 .option-label {
     width: 35%;
     text-align: right;
@@ -311,13 +311,13 @@ BenchmarkOptions {
     margin: 1 0;
 }
 
-/* Stile per tutti i campi di input (Input, Select, Switch) */
+/* Style for all input fields (Input, Select, Switch) */
 .option-input {
     width: auto;
     margin: 1 0;
 }
 
-/* Un aggiustamento specifico per lo Switch */
+/* A specific tweak for the Switch */
 Switch.option-input {
     width: auto;
     height: 1;
@@ -343,7 +343,7 @@ Select.option-input {
     margin: 1 0;
 }
 
-/* Stile per il container dei pulsanti in fondo */
+/* Style for the bottom button container */
 .button-container {
     align: center middle;
     width: 100%;

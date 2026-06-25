@@ -94,7 +94,7 @@ def run_job(job, wlmanager, ppn: int, pre_commands: List[str] = None):
     if not job.node_list:
         raise Exception(f"Application {job.id_num} has 0 allocated nodes.")
     
-    # Passa pre_commands al workload manager
+    # Pass pre_commands through to the workload manager.
     cmd_string = wlmanager.run_job(job.node_list, ppn, job.run_app(), pre_commands=pre_commands)
     
     if not cmd_string:
@@ -367,7 +367,7 @@ class ExperimentRunner:
             app_instance = mod_app.app(idx_counter, collect, args)
             
             # Timing & Partition Metadata
-            # Un valore vuoto/whitespace (default della TUI) equivale a "start at 0".
+            # An empty/whitespace value (the TUI default) means "start at 0".
             start_val = str(details.get("start", "0")).strip() or "0"
             manual_partition = details.get("partition")
             app_instance.partition_id = int(manual_partition) if manual_partition is not None else (0 if collect else 1)
@@ -413,9 +413,9 @@ class ExperimentRunner:
         """Main execution loop (Setup -> Run -> Wait -> Converge)."""
         self.log(f"[{self.name}] Execution started.")
 
-        # Esponiamo la directory dati dell'esperimento ai binari lanciati, così
-        # un benchmark può scrivere file per-nodo lì (es. tournament_nb). Path
-        # assoluto: i rank condividono il filesystem ma non hanno la CWD su exp_dir.
+        # Expose the experiment data dir to the launched binaries so a benchmark
+        # can write per-node files there (e.g. tournament_nb). Absolute path: the
+        # ranks share the filesystem but their CWD is not exp_dir.
         os.environ["CINETIC_NODE_RESULTS_DIR"] = os.path.abspath(self.exp_dir)
 
         # Params
@@ -426,8 +426,8 @@ class ExperimentRunner:
         alpha = float(self.global_opts.get('alpha', 0.05))
         beta = float(self.global_opts.get('beta', 0.05))
 
-        # Recupera l'header dalle opzioni globali (dove l'Orchestrator lo ha messo)
-        # Default a lista vuota se non esiste
+        # Get the header from the global options (where the orchestrator put it);
+        # default to an empty list if absent.
         system_header = self.global_opts.get('system_header', [])
 
         # Schedule Logic Preparation
@@ -492,16 +492,16 @@ class ExperimentRunner:
                     for aid in list(running):
                         proc = self.apps[aid].process
                         if proc.poll() is not None:
-                            # Il processo è terminato
+                            # The process has terminated.
                             try:
                                 out, err = proc.communicate()
                                 self.apps[aid].set_output(out, err)
                                 
-                                # --- INIZIO MODIFICA: Error Logging ---
+                                # --- Error logging ---
                                 if proc.returncode != 0:
-                                    # Costruiamo il messaggio di errore
+                                    # Build the error message.
                                     error_msg = (
-                                        f"\n[CRAB ERROR] Experiment '{self.name}' - App {aid} failed!\n"
+                                        f"\n[CINETIC ERROR] Experiment '{self.name}' - App {aid} failed!\n"
                                         f"Return Code: {proc.returncode}\n"
                                     )
                                     
@@ -510,28 +510,27 @@ class ExperimentRunner:
                                         decoded_err = err.decode('utf-8', errors='replace') if isinstance(err, bytes) else err
                                         error_msg += f"--- STDERR ---\n{decoded_err}\n"
                                     
-                                    # Decodifica STDOUT (spesso MPI stampa errori qui)
+                                    # Decode STDOUT (MPI often prints errors here).
                                     if out:
                                         decoded_out = out.decode('utf-8', errors='replace') if isinstance(out, bytes) else out
                                         error_msg += f"--- STDOUT TAIL ---\n{decoded_out[-2000:]}\n" # Ultimi 2000 caratteri
                                     
                                     error_msg += "------------------------------------------------\n"
 
-                                    # 1. Stampa su sys.stderr (finisce in slurm_error.log)
+                                    # 1. Print to sys.stderr (ends up in slurm_error.log).
                                     print(error_msg, file=sys.stderr, flush=True)
-                                    
-                                    # 2. Salva un file di log dedicato nella cartella dell'esperimento
+
+                                    # 2. Save a dedicated log file in the experiment folder.
                                     try:
                                         log_path = os.path.join(self.exp_dir, f"error_app_{aid}.log")
                                         with open(log_path, "w") as f:
                                             f.write(error_msg)
                                     except Exception as e:
-                                        print(f"[CRAB WARNING] Could not write error log file: {e}", file=sys.stderr)
-                                # --- FINE MODIFICA ---
+                                        print(f"[CINETIC WARNING] Could not write error log file: {e}", file=sys.stderr)
 
-                                # --- Dump raw stdout on success (solo se stiamo raccogliendo) ---
-                                # Utile per ispezionare l'output grezzo del benchmark
-                                # (quello che write_results() stampa) senza doverlo parsare.
+                                # --- Dump raw stdout on success (only when collecting) ---
+                                # Useful to inspect the benchmark's raw output (what
+                                # write_results() prints) without having to parse it.
                                 elif self.apps[aid].collect_flag and out:
                                     decoded_out = out.decode('utf-8', errors='replace') if isinstance(out, bytes) else out
                                     try:
@@ -539,7 +538,7 @@ class ExperimentRunner:
                                         with open(stdout_path, "a") as f:
                                             f.write(f"=== Run {runs + 1} ===\n{decoded_out}\n")
                                     except Exception as e:
-                                        print(f"[CRAB WARNING] Could not write stdout log file: {e}", file=sys.stderr)
+                                        print(f"[CINETIC WARNING] Could not write stdout log file: {e}", file=sys.stderr)
 
                             except Exception as e:
                                 self.log(f"[INTERNAL ERROR] Failed reading output for app {aid}: {e}")
@@ -617,36 +616,36 @@ class Engine:
         """
         Generates the list of #SBATCH lines handling defaults, overrides, and security.
         """
-        # Esplicita lista di nodi (es. dalla mappa topologica della TUI): vincola
-        # il job esattamente a questi host e forza il conteggio nodi a combaciare.
+        # Explicit node list (e.g. from the TUI topology map): pin the job to
+        # exactly these hosts and force the node count to match.
         nodelist = normalize_nodelist(global_opts.get('nodelist'))
         num_nodes_directive = len(nodelist) if nodelist else global_opts.get('numnodes')
 
-        # 1. Definizione dei Parametri Protetti (Il framework vince sempre)
-        # Mappa: Chiave -> Valore calcolato dal framework
+        # 1. Define the protected parameters (the framework always wins).
+        # Map: key -> value computed by the framework.
         protected_defaults = {
             'nodes': f"--nodes={num_nodes_directive}",
             'ntasks-per-node': f"--ntasks-per-node={global_opts.get('ppn', 1)}",
-            # Alias comuni da bloccare
+            # Common aliases to block.
             'N': None,
-            'n': None, # Blocchiamo -n per sicurezza se l'utente prova a passarlo
-            # Quando Crab gestisce una selezione esplicita, blocca gli override utente.
+            'n': None,  # block -n for safety if the user tries to pass it
+            # When CINETIC manages an explicit selection, block user overrides.
             'nodelist': None,
-            'w': None,  # alias breve di --nodelist
+            'w': None,  # short alias of --nodelist
         }
         if nodelist:
             protected_defaults['nodelist'] = "--nodelist=" + ",".join(nodelist)
 
-        # 2. Definizione dei Default Sovrascrivibili
-        # Mappa: Chiave univoca -> Stringa completa direttiva
+        # 2. Define the overridable defaults.
+        # Map: unique key -> full directive string.
         directives_map = {
-            'job-name': f"--job-name=crab_{global_opts.get('extrainfo', 'job')[:10]}",
+            'job-name': f"--job-name=cinetic_{global_opts.get('extrainfo', 'job')[:10]}",
             'output': f"--output={os.path.join(data_directory, 'slurm_output.log')}",
             'error': f"--error={os.path.join(data_directory, 'slurm_error.log')}",
             'time': f"--time={global_opts.get('walltime', '00:10:00')}"
         }
 
-        # Uniamo i protetti alla mappa (per averli come base)
+        # Merge the protected ones into the map (as the base).
         for k, v in protected_defaults.items():
             if v: directives_map[k] = v
 
@@ -654,18 +653,18 @@ class Engine:
         # Recuero i default di sistema passati dall'Orchestrator
         system_defaults = global_opts.get('system_sbatch', [])
 
-        # Parsiamo prima i system defaults (bassa priorità rispetto all'utente, alta rispetto ai base)
+        # Parse the system defaults first (low priority vs. the user, high vs. the base).
         for raw in system_defaults:
              key = raw.lstrip('-').split('=')[0]
-             # Non sovrascriviamo i protected
-             if key not in protected_defaults: 
+             # Do not overwrite the protected ones.
+             if key not in protected_defaults:
                  directives_map[key] = raw
 
 
-        # 3. Parsing Direttive Utente (dal JSON, Override Finale)
+        # 3. Parse the user directives (from the JSON; the final override).
         user_directives = global_opts.get('sbatch_directives', [])
-        
-        # Supporto legacy: se l'utente passa un dict invece di una lista, lo convertiamo
+
+        # Legacy support: if the user passes a dict instead of a list, convert it.
         if isinstance(user_directives, dict):
             converted = []
             for k, v in user_directives.items():
@@ -690,11 +689,11 @@ class Engine:
             if '=' in clean_str:
                 key = clean_str.split('=')[0]
             else:
-                key = clean_str.split()[0] # Gestisce casi rari come "-J name" se passati come stringa unica
+                key = clean_str.split()[0]  # handle rare cases like "-J name" passed as a single string
             
             # C. Conflict Resolution
             if key in protected_defaults:
-                self.log(f"[CONFIG WARN] User directive '{directive}' ignored. '{key}' is managed by Crab to ensure stability.")
+                self.log(f"[CONFIG WARN] User directive '{directive}' ignored. '{key}' is managed by CINETIC to ensure stability.")
                 continue
             
             if key in ['output', 'error', 'o', 'e']:
@@ -704,7 +703,7 @@ class Engine:
             directives_map[key] = directive
 
         # 4. Rendering
-        # Restituiamo i valori (le stringhe complete)
+        # Return the values (the full strings).
         return [f"#SBATCH {v}" for v in directives_map.values()]
 
     def _run_orchestrator(self, config: Dict[str, Any], environment: Dict[str, Any]):
@@ -739,14 +738,14 @@ class Engine:
         # 1. Genera timestamp base
         timestamp_str = datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S-%f')
         
-        # 2. Cerca il nome custom nelle opzioni
+        # 2. Look for a custom name in the options.
         custom_name = g_opts.get('name', '')
-        
+
         if custom_name:
-            # Sanificazione: mantieni solo alfanumerici, trattini e underscore
-            # Sostituisci spazi o altri caratteri con '_'
+            # Sanitize: keep only alphanumerics, hyphens and underscores;
+            # replace spaces or other characters with '_'.
             safe_name = "".join([c if c.isalnum() or c in ('-', '_') else '_' for c in str(custom_name)])
-            # Formato: NAME_TIMESTAMP
+            # Format: NAME_TIMESTAMP
             folder_name = f"{safe_name}_{timestamp_str}"
         else:
             # Fallback legacy: solo TIMESTAMP
@@ -781,7 +780,7 @@ class Engine:
         with open(script_path, 'w') as f:
             f.write("#!/bin/bash\n\n")
             
-            # Scrittura direttive calcolate
+            # Write the computed directives.
             for line in sbatch_headers:
                 f.write(f"{line}\n")
             
@@ -790,7 +789,7 @@ class Engine:
             if os.path.exists(venv):
                 f.write(f"\nsource {venv}\n")
 
-            # Recuperiamo la lista passata dall'Orchestrator nel config
+            # Retrieve the list passed by the orchestrator in the config.
             system_header = g_opts.get('system_header', [])
             if system_header:
                 f.write("\n# --- System Setup (Modules & Environment) ---\n")
@@ -818,8 +817,6 @@ class Engine:
         self.log(result.stdout.strip())
 
     def _run_worker(self, config: Dict[str, Any], environment: Dict[str, Any], output_dir: str):
-        # ... (Il worker rimane identico a prima) ...
-        # (Incolla qui il codice di _run_worker che hai già)
         self.log("--- [WORKER] Started ---")
         
         orig_env = os.environ.copy()

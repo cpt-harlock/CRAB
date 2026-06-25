@@ -1,7 +1,7 @@
 import os
 import sys
 
-# Aggiunge la directory 'src' al path di Python per trovare il pacchetto 'cinetic'
+# Add the 'src' directory to the Python path so the 'cinetic' package is found.
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), 'src')))
 
 from cinetic.cli.orchestrator import run_from_cli
