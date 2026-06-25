@@ -1,6 +1,6 @@
 import sys
 import os
-sys.path.append(os.environ["CRAB_ROOT"] + "/wrappers")
+sys.path.append(os.environ["CINETIC_ROOT"] + "/wrappers")
 from base import base
 
 class app(base):
@@ -11,7 +11,7 @@ class app(base):
     ]
 
     def get_binary_path(self):
-        return os.environ["CRAB_ROOT"] + '/src/ember/mpi/sweep3d/sweep3d'
+        return os.environ["CINETIC_ROOT"] + '/src/ember/mpi/sweep3d/sweep3d'
 
     def read_data(self):  # return list (size num_metrics) of variable size lists
         data_list = [None]*self.num_metrics

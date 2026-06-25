@@ -1,12 +1,12 @@
 import os
 import sys
-sys.path.append(os.environ["CRAB_ROOT"] + "/wrappers")
+sys.path.append(os.environ["CINETIC_ROOT"] + "/wrappers")
 from base import sizeof_fmt
 from nccl_common import ncclbase
 
 class app(ncclbase):  
     def get_binary_path(self):
-        return os.environ["CRAB_ROOT"] + "/src/nccl-tests/build/sendrecv_perf"
+        return os.environ["CINETIC_ROOT"] + "/src/nccl-tests/build/sendrecv_perf"
     
     def get_bench_name(self):
         return "NCCL SendRecv"

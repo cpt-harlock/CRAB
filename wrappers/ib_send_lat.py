@@ -1,6 +1,6 @@
 import sys
 import os
-sys.path.append(os.environ["CRAB_ROOT"] + "/wrappers")
+sys.path.append(os.environ["CINETIC_ROOT"] + "/wrappers")
 from base import base,sizeof_fmt
 import ast
 
@@ -10,10 +10,10 @@ class app(base):
     ]
 
     def get_binary_path(self):
-        return os.environ["CRAB_ROOT"] + "/wrappers/ib_send_lat.sh"
+        return os.environ["CINETIC_ROOT"] + "/wrappers/ib_send_lat.sh"
 
     def read_data(self):  # return list (size num_metrics) of variable size lists
-        ib_devices = os.environ["CRAB_IB_DEVICES"].count("#") + 1
+        ib_devices = os.environ["CINETIC_IB_DEVICES"].count("#") + 1
         files = []
         for i in range(ib_devices):
             file = "ib_send_lat" + str(i)

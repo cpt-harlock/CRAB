@@ -7,7 +7,7 @@ import json
 import os
 
 from .topology_map import TopologyMapScreen
-from crab.topology import Topology
+from cinetic.topology import Topology
 
 class BenchmarkOptions(VerticalScroll):
     """Un widget per configurare ed eseguire un benchmark."""

@@ -11,11 +11,11 @@ fabric with two cells (see the header in that file for the expected layout).
 import os
 import sys
 
-# Make the 'crab' package under src/ importable.
+# Make the 'cinetic' package under src/ importable.
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.insert(0, os.path.join(ROOT, "src"))
 
-from crab.topology import Locality, Topology, parse_ibnetdiscover  # noqa: E402
+from cinetic.topology import Locality, Topology, parse_ibnetdiscover  # noqa: E402
 
 FIXTURE = os.path.join(os.path.dirname(__file__), "fixtures", "example_ibnetdiscover.txt")
 

@@ -15,8 +15,8 @@ sys.path.insert(0, os.path.join(ROOT, "src"))
 
 from textual.app import App  # noqa: E402
 
-from crab.topology import Topology  # noqa: E402
-from crab.tui.widgets.topology_map import (  # noqa: E402
+from cinetic.topology import Topology  # noqa: E402
+from cinetic.tui.widgets.topology_map import (  # noqa: E402
     NodeBlock,
     TopologyMapScreen,
 )
@@ -27,7 +27,7 @@ TOPO = os.path.join(ROOT, "topologies", "example.json")
 class _Harness(App):
     """Minimal app that opens the modal and captures its result."""
 
-    CSS_PATH = os.path.join(ROOT, "src", "crab", "tui", "assets", "tui.tcss")
+    CSS_PATH = os.path.join(ROOT, "src", "cinetic", "tui", "assets", "tui.tcss")
 
     def __init__(self, topology, preselected=None):
         super().__init__()

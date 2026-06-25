@@ -9,7 +9,8 @@ from typing import Dict, Any
 # Aggiungi 'src' al path di sistema PRIMA di qualsiasi altro import custom
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
 
-from crab.core.engine import Engine
+from cinetic.compat import apply_legacy_env
+from cinetic.core.engine import Engine
 
 def load_environment_config(preset_arg: str) -> Dict[str, Any]:
     presets_filename = "presets.json"
@@ -31,9 +32,9 @@ def load_environment_config(preset_arg: str) -> Dict[str, Any]:
     final_env = common_preset.get("env", {}).copy()
     final_env.update(target_preset.get("env", {}))
 
-    # Assicuriamo che CRAB_SYSTEM sia impostato
-    if "CRAB_SYSTEM" not in final_env:
-        final_env["CRAB_SYSTEM"] = preset_arg
+    # Assicuriamo che CINETIC_SYSTEM sia impostato
+    if "CINETIC_SYSTEM" not in final_env:
+        final_env["CINETIC_SYSTEM"] = preset_arg
 
     # 2. Merge SBATCH directives (List extend)
     # L'ordine è: Common -> Preset. (Engine poi aggiungerà Experiment overrides)
@@ -67,6 +68,9 @@ def prepare_execution_environment(env_dict: Dict[str, str]) -> Dict[str, str]:
     return final_env
 
 def run_from_cli():
+    # Seed CINETIC_* from any legacy CRAB_* in the surrounding shell/env.
+    apply_legacy_env()
+
     # --- WORKER MODE ---
     if "--worker" in sys.argv:
         try:
@@ -84,7 +88,10 @@ def run_from_cli():
             # NOTA: environment.json ora contiene solo le ENV vars processate dall'orchestrator
             with open(env_file, 'r') as f:
                 execution_env = json.load(f)
-            
+
+            # Legacy snapshots (older runs) may carry CRAB_* keys; mirror them.
+            apply_legacy_env(execution_env)
+
             print(f"--- [WORKER] Environment loaded. Starting engine. ---", flush=True)
 
 
@@ -113,14 +120,14 @@ def run_from_cli():
     
     # --- ORCHESTRATOR MODE ---
     else:
-        parser = argparse.ArgumentParser(description="CRAB Benchmarking Orchestrator.")
+        parser = argparse.ArgumentParser(description="CINETIC Benchmarking Orchestrator.")
         parser.add_argument("-c", "--config", dest="app_config_file", required=True, help="Path to the JSON benchmark config.")
         parser.add_argument("-p", "--preset", help="Name of the preset to use.")
         parser.add_argument("--worker", action="store_true", help=argparse.SUPPRESS)
         args = parser.parse_args()
 
         try:
-            selected_preset = args.preset or os.environ.get("CRAB_PRESET")
+            selected_preset = args.preset or os.environ.get("CINETIC_PRESET")
             if os.path.exists(".env") and not selected_preset:
                 with open(".env", "r") as f:
                     selected_preset = f.read().strip()

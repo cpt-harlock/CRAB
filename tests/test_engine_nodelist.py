@@ -9,7 +9,7 @@ import sys
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.insert(0, os.path.join(ROOT, "src"))
 
-from crab.core.engine import Engine, normalize_nodelist  # noqa: E402
+from cinetic.core.engine import Engine, normalize_nodelist  # noqa: E402
 
 
 def _header(global_opts):

@@ -1,6 +1,6 @@
 import sys
 import os
-sys.path.append(os.environ["CRAB_ROOT"] + "/wrappers")
+sys.path.append(os.environ["CINETIC_ROOT"] + "/wrappers")
 
 class app(base):  
     exists = True
@@ -14,7 +14,7 @@ class app(base):
     ]
 
     def get_binary_path(self):
-        env_name = "CRAB_AMG_PATH"
+        env_name = "CINETIC_AMG_PATH"
         if env_name not in os.environ or os.environ[env_name] == "":
             self.exists = False
             return None

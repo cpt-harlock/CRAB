@@ -47,7 +47,7 @@ class wl_manager:
         slurm_string = (
             'srun --export=ALL ' +
             node_list_arg + ' ' +
-            os.environ.get("CRAB_PINNING_FLAGS", "") + ' ' + 
+            os.environ.get("CINETIC_PINNING_FLAGS", "") + ' ' + 
             '-n ' + str(ppn * num_nodes) + ' ' +
             '-N ' + str(num_nodes) + ' ' +
             final_cmd  # Usiamo il comando calcolato (wrapped o raw)

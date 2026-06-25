@@ -2,7 +2,7 @@
 
 Usage (as a script)::
 
-    python -m crab.topology.parser <ibnetdiscover.txt> [-o topology.json]
+    python -m cinetic.topology.parser <ibnetdiscover.txt> [-o topology.json]
 
 The raw input is the plain-text output of the InfiniBand ``ibnetdiscover``
 utility. Each device is declared by a ``Switch`` or ``Ca`` (Channel Adapter)
@@ -40,7 +40,7 @@ from collections import defaultdict, deque
 from pathlib import Path
 from typing import Dict, List, Tuple, Union
 
-from crab.topology.model import Cell, Link, Nic, Node, Switch, Topology
+from cinetic.topology.model import Cell, Link, Nic, Node, Switch, Topology
 
 # --- line grammar (kept compatible with cinetic/topology.py) ---------------
 RE_SWITCH = re.compile(r'^Switch\s+(\d+)\s+"(S-[0-9a-fA-F]+)"\s*#\s*"([^"]*)"')

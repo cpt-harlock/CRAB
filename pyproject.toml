@@ -1,0 +1,46 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cinetic"
+version = "0.1.0"
+description = "Co-running interference & network-topology investigation for HPC clusters"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "cpt-harlock" }]
+keywords = ["hpc", "mpi", "slurm", "benchmarking", "network-congestion", "topology"]
+
+# Direct runtime dependencies (the analysis/CLI core). Transitive packages that
+# happen to appear in requirements.txt are intentionally omitted here.
+dependencies = [
+    "numpy>=2.3.2",
+    "pandas>=2.3.2",
+    "scipy>=1.16.1",
+    "rich>=14.1.0",
+]
+
+[project.optional-dependencies]
+tui = [
+    "textual>=6.1.0",
+    "textual-fspicker>=0.5.0",
+]
+analysis = [
+    "matplotlib>=3.8",
+]
+dev = [
+    "cinetic[tui,analysis]",
+]
+
+# Console entrypoints are introduced in phase P4 (unified `cinetic` CLI):
+#   [project.scripts]
+#   cinetic = "cinetic.__main__:main"
+
+[tool.setuptools]
+# src/ layout; auto-discovery finds the package under src/ (currently `crab`,
+# renamed to `cinetic` in phase P1 — discovery survives the rename).
+package-dir = { "" = "src" }
+
+[tool.setuptools.packages.find]
+where = ["src"]

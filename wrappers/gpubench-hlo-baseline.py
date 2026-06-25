@@ -1,6 +1,6 @@
 import os
 import sys
-sys.path.append(os.environ["CRAB_ROOT"] + "/wrappers")
+sys.path.append(os.environ["CINETIC_ROOT"] + "/wrappers")
 from base import sizeof_fmt
 from gpubench_common import gpubench
 

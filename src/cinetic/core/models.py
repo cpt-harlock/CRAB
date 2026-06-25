@@ -1,4 +1,4 @@
-# crab/core/models.py
+# cinetic/core/models.py
 from dataclasses import dataclass, field
 from typing import Dict
 

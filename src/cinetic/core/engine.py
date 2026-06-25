@@ -326,7 +326,7 @@ class ExperimentRunner:
                 raise ImportError(
                     f"'{path}' is not a loadable Python wrapper. "
                     f"Point the application path to a wrapper .py "
-                    f"(e.g. in {os.environ.get('CRAB_WRAPPERS_PATH', 'wrappers')}), "
+                    f"(e.g. in {os.environ.get('CINETIC_WRAPPERS_PATH', 'wrappers')}), "
                     f"not the benchmark binary."
                 )
             mod = importlib.util.module_from_spec(spec)
@@ -334,8 +334,8 @@ class ExperimentRunner:
             return mod
 
         # WLM Loading
-        wlm_name = os.environ.get("CRAB_WL_MANAGER", "slurm") # default
-        wlm_path = f"./src/crab/core/wl_manager/{wlm_name}.py"
+        wlm_name = os.environ.get("CINETIC_WL_MANAGER", "slurm") # default
+        wlm_path = f"./src/cinetic/core/wl_manager/{wlm_name}.py"
         self.wlmanager = load_module(wlm_path).wl_manager()
 
         # App Instantiation
@@ -345,9 +345,9 @@ class ExperimentRunner:
             path = details.get("path")
             if not path: continue
 
-            # Controlla la ENV CRAB_WRAPPERS_PATH
-            if not os.path.isabs(path) and "CRAB_WRAPPERS_PATH" in os.environ:
-                path = os.path.join(os.environ["CRAB_WRAPPERS_PATH"], path)
+            # Controlla la ENV CINETIC_WRAPPERS_PATH
+            if not os.path.isabs(path) and "CINETIC_WRAPPERS_PATH" in os.environ:
+                path = os.path.join(os.environ["CINETIC_WRAPPERS_PATH"], path)
             
             if not os.path.exists(path):
                  self.log(f"[ERROR] Wrapper not found at: {path}")
@@ -410,7 +410,7 @@ class ExperimentRunner:
         # Esponiamo la directory dati dell'esperimento ai binari lanciati, così
         # un benchmark può scrivere file per-nodo lì (es. tournament_nb). Path
         # assoluto: i rank condividono il filesystem ma non hanno la CWD su exp_dir.
-        os.environ["CRAB_NODE_RESULTS_DIR"] = os.path.abspath(self.exp_dir)
+        os.environ["CINETIC_NODE_RESULTS_DIR"] = os.path.abspath(self.exp_dir)
 
         # Params
         min_runs = int(self.global_opts.get('minruns', 10))
@@ -746,14 +746,14 @@ class Engine:
             folder_name = timestamp_str
 
         # 3. Costruzione path finale
-        runner_id = (environment.get("CRAB_SYSTEM", "unknown") + "/" + folder_name)
+        runner_id = (environment.get("CINETIC_SYSTEM", "unknown") + "/" + folder_name)
         data_directory = os.path.join(data_path, runner_id)
         # --------------------------------------
 
         os.makedirs(data_directory, exist_ok=True)
 
         with open(desc_file, 'a+') as f:
-            f.write(f"{environment.get('CRAB_SYSTEM')},{num_nodes},{g_opts.get('extrainfo')},{data_directory}\n")
+            f.write(f"{environment.get('CINETIC_SYSTEM')},{num_nodes},{g_opts.get('extrainfo')},{data_directory}\n")
 
         with open(os.path.join(data_directory, 'config.json'), 'w') as f:
             json.dump(config, f, indent=4)
@@ -763,7 +763,7 @@ class Engine:
         # --- GENERAZIONE HEADER SBATCH DINAMICO ---
         sbatch_headers = self._generate_sbatch_header(g_opts, data_directory)
 
-        script_path = os.path.join(data_directory, 'crab_job.sh')
+        script_path = os.path.join(data_directory, 'cinetic_job.sh')
         cmd = f"{sys.executable} {os.path.abspath(sys.argv[0])} --worker --workdir {data_directory}"
         
         with open(script_path, 'w') as f:

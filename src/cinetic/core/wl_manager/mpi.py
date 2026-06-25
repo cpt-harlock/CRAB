@@ -36,15 +36,15 @@ class wl_manager:
         # OpenMPI non propaga automaticamente le env var non-OMPI_*: inoltriamo
         # esplicitamente quelle che servono ai binari (es. dir risultati per-nodo).
         env_forward = ""
-        if "CRAB_NODE_RESULTS_DIR" in os.environ:
-            env_forward = "-x CRAB_NODE_RESULTS_DIR "
+        if "CINETIC_NODE_RESULTS_DIR" in os.environ:
+            env_forward = "-x CINETIC_NODE_RESULTS_DIR "
 
-        job_cmd = os.environ["CRAB_MPIRUN"] + " " + \
-                  os.environ["CRAB_MPIRUN_MAP_BY_NODE_FLAG"] + " " + \
-                  os.environ["CRAB_MPIRUN_ADDITIONAL_FLAGS"] + " " + \
-                  os.environ["CRAB_PINNING_FLAGS"] + " " + \
+        job_cmd = os.environ["CINETIC_MPIRUN"] + " " + \
+                  os.environ["CINETIC_MPIRUN_MAP_BY_NODE_FLAG"] + " " + \
+                  os.environ["CINETIC_MPIRUN_ADDITIONAL_FLAGS"] + " " + \
+                  os.environ["CINETIC_PINNING_FLAGS"] + " " + \
                   env_forward + \
-                  os.environ["CRAB_MPIRUN_HOSTNAMES_FLAG"] + " " + node_list_string + " " + \
+                  os.environ["CINETIC_MPIRUN_HOSTNAMES_FLAG"] + " " + node_list_string + " " + \
                   "-np " + str(ppn*num_nodes) + " " + final_cmd
         print("[DEBUG]: MPI command is: " + job_cmd)
         return job_cmd

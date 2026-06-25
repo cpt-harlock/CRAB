@@ -1,6 +1,6 @@
 import sys
 import os
-sys.path.append(os.environ["CRAB_ROOT"] + "/wrappers")
+sys.path.append(os.environ["CINETIC_ROOT"] + "/wrappers")
 from base import base
 
 class app(base):
@@ -10,7 +10,7 @@ class app(base):
     ]
 
     def get_binary_path(self):
-        return os.environ["CRAB_ROOT"] + "/src/netgauge-2.4.6/netgauge"
+        return os.environ["CINETIC_ROOT"] + "/src/netgauge-2.4.6/netgauge"
     
     # how to extract the data
     # Returns a list (one element per metric) of lists (one element per measurement) of values

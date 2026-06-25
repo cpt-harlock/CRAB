@@ -16,7 +16,7 @@ class TUIController:
         execution_env = os.environ.copy()
         
         if selected_preset != "Custom":
-            tui_settings["CRAB_SYSTEM"] = selected_preset
+            tui_settings["CINETIC_SYSTEM"] = selected_preset
 
         for key, value in tui_settings.items():
             if isinstance(value, str) and value == "__CWD__":

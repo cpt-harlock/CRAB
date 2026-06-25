@@ -20,11 +20,11 @@ import json
 import os
 import sys
 
-# Make the 'crab' package importable (mirrors cli.py / tui.py).
+# Make the 'cinetic' package importable (mirrors cli.py / tui.py).
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "src")))
 
-from crab.analysis import metrics, outliers as outl, params as prm, parse, topo
-from crab.analysis import report_plot, report_text
+from cinetic.analysis import metrics, outliers as outl, params as prm, parse, topo
+from cinetic.analysis import report_plot, report_text
 
 
 def _find_exp_dirs(path: str) -> list[str]:

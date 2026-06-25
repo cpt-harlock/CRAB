@@ -1,6 +1,6 @@
 import os
 import sys
-sys.path.append(os.environ["CRAB_ROOT"] + "/wrappers")
+sys.path.append(os.environ["CINETIC_ROOT"] + "/wrappers")
 from base import base,sizeof_fmt
 
 class app(base):  
@@ -9,7 +9,7 @@ class app(base):
     ]
 
     def get_binary_path(self):
-        return os.environ["CRAB_ROOT"] + "/src/dnn-proxies/bin/dlrm"
+        return os.environ["CINETIC_ROOT"] + "/src/dnn-proxies/bin/dlrm"
     
     def read_data(self):
         output = self.stdout

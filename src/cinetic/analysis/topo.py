@@ -1,6 +1,6 @@
 """Topology distance for node pairs.
 
-Wraps the existing ``crab.topology.model.Topology`` and handles the hostname
+Wraps the existing ``cinetic.topology.model.Topology`` and handles the hostname
 mismatch: tournament CSVs carry FQDNs (``lrdn0271.leonardo.local``) while the
 topology keys are short names (``lrdn0271``).
 """
@@ -10,7 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional
 
-from crab.topology.model import Locality, Topology
+from cinetic.topology.model import Locality, Topology
 
 
 def normalize_host(host: str) -> str:

@@ -1,6 +1,6 @@
 import sys
 import os
-sys.path.append(os.environ["CRAB_ROOT"] + "/wrappers")
+sys.path.append(os.environ["CINETIC_ROOT"] + "/wrappers")
 from base import base,sizeof_fmt
 
 class gpubench(base):
@@ -11,12 +11,12 @@ class gpubench(base):
 
     def get_path(self, name):
         p = ""
-        sys = os.environ["CRAB_SYSTEM"]
+        sys = os.environ["CINETIC_SYSTEM"]
         if "CudaAware" in name and (sys == "alps" or sys == "lumi"):
-            p += os.environ["CRAB_ROOT"] + "/src/microbench-gpu/select_gpu_" + sys + " "
+            p += os.environ["CINETIC_ROOT"] + "/src/microbench-gpu/select_gpu_" + sys + " "
         elif "CudaAware" in name and (sys == "leonardo"):
-            p += os.environ["CRAB_ROOT"] + "/src/microbench-gpu/select_nic_" + sys + " "
-        p += os.environ["CRAB_ROOT"] + "/src/microbench-gpu/bin/" + name
+            p += os.environ["CINETIC_ROOT"] + "/src/microbench-gpu/select_nic_" + sys + " "
+        p += os.environ["CINETIC_ROOT"] + "/src/microbench-gpu/bin/" + name
         return p
     
     def read_data(self):

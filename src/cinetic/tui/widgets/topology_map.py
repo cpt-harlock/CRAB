@@ -1,6 +1,6 @@
 """Graphical, topology-aware node selector for the CRAB TUI.
 
-Renders a parsed topology (see :mod:`crab.topology`) as a 2D map:
+Renders a parsed topology (see :mod:`cinetic.topology`) as a 2D map:
 
     [ cell01 ]            [ cell02 ]
      L1     L2             L3     L4
@@ -25,7 +25,7 @@ from textual.reactive import reactive
 from textual.screen import ModalScreen
 from textual.widgets import Button, Static
 
-from crab.topology import Topology
+from cinetic.topology import Topology
 
 
 class NodeToggled(Message):
