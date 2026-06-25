@@ -18,7 +18,7 @@ from .controller import TUIController
 class CineticApp(App):
     CSS_PATH = "assets/cinetic.tcss"
     TITLE = "CINETIC"
-    SUB_TITLE = "co-running interference & network-topology investigation"
+    SUB_TITLE = "CINECA Network Integrity Checker"
     BINDINGS = [
         ("q", "quit", "Quit"),
         ("l", "load", "Load"),
@@ -50,8 +50,8 @@ class CineticApp(App):
 
     def action_about(self) -> None:
         self.notify(
-            "CINETIC — co-running interference & network-topology "
-            "investigation for HPC clusters.",
+            "CINETIC — CINECA Network Integrity Checker. Checks interconnect "
+            "health under co-running load (victims vs. aggressors).",
             title="CINETIC", timeout=6)
     
     def _load_default_env(self):

@@ -39,8 +39,7 @@ def _build_parser() -> argparse.ArgumentParser:
     control of its own argv — argparse REMAINDER mishandles ``--help``."""
     parser = argparse.ArgumentParser(
         prog="cinetic",
-        description="CINETIC — co-running interference & network-topology "
-                    "investigation for HPC clusters.")
+        description="CINETIC — CINECA Network Integrity Checker.")
     sub = parser.add_subparsers(dest="command", metavar="<command>")
     for name, help_text in _PASSTHROUGH.items():
         sub.add_parser(name, help=help_text, add_help=False)

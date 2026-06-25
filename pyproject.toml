@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "cinetic"
 version = "0.1.0"
-description = "Co-running interference & network-topology investigation for HPC clusters"
+description = "CINETIC — CINECA Network Integrity Checker: HPC interconnect health under co-running load"
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }

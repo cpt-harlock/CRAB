@@ -2,7 +2,7 @@
 
 ## What this project is
 
-**CINETIC** (Co-running INterference & nEtwork-Topology Investigation for Clusters) is an HPC benchmarking framework for running, measuring, and analyzing MPI collective benchmarks on Slurm-managed clusters. Its primary use case is studying **network congestion** caused by co-running applications (victims vs. aggressors) on systems like Leonardo @ CINECA. (Formerly named CRAB; see `PLAN_CINETIC_REFACTOR.md` for the rebrand/refactor.)
+**CINETIC** (CINECA Network Integrity Checker) is an HPC framework for running, measuring, and analyzing MPI collective benchmarks on Slurm-managed clusters. Its primary use case is checking **interconnect health under realistic load** — i.e. the **network congestion** caused by co-running applications (victims vs. aggressors) on systems like Leonardo @ CINECA. (Forked from CRAB; see `PLAN_CINETIC_REFACTOR.md` for the rebrand/refactor.)
 
 ## How to run
 
