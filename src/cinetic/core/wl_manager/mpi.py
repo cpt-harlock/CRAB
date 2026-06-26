@@ -1,4 +1,5 @@
 import os
+import shlex
 
 from typing import List, Optional
 
@@ -27,6 +28,17 @@ class wl_manager:
         num_nodes=len(node_list)
         node_list_string=','.join(node_list)
 
+        # Make the per-experiment results dir reach the ranks (e.g. tournament_nb
+        # writes node_*.csv there). OpenMPI's `-x` forwarding proved unreliable
+        # under Slurm/PMIx — the value never reached the ranks, so the binary fell
+        # back to its CWD — so set it directly in the launched command's
+        # environment with an `env VAR=value` prefix, which travels in the command
+        # string itself and is independent of launcher env propagation.
+        out_dir = os.environ.get("CINETIC_NODE_RESULTS_DIR") \
+            or os.environ.get("CRAB_NODE_RESULTS_DIR")
+        if out_dir:
+            cmd = f"env CINETIC_NODE_RESULTS_DIR={shlex.quote(out_dir)} {cmd}"
+
         # --- WRAPPER LOGIC ---
         # If there are preliminary commands (e.g. 'module load openmpi'), run them
         # before the app command on each rank, silencing their output but keeping
@@ -40,19 +52,12 @@ class wl_manager:
             final_cmd = cmd
         # ---------------------
 
-        # OpenMPI does not forward non-OMPI_* env vars automatically: explicitly
-        # forward the ones the binaries need (e.g. the per-node results dir).
-        # That value is dynamic and per-experiment, so it stays in os.environ.
-        env_forward = "-x CINETIC_NODE_RESULTS_DIR" \
-            if "CINETIC_NODE_RESULTS_DIR" in os.environ else ""
-
         ctx = self.ctx
         parts = [
             ctx.mpirun,
             ctx.mpirun_map_by_node_flag,
             ctx.mpirun_additional_flags,
             ctx.pinning_flags,
-            env_forward,
             ctx.mpirun_hostnames_flag,
             node_list_string,
             "-np " + str(ppn * num_nodes),
