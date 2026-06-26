@@ -159,11 +159,12 @@ def format_per_round_per_node(an: Analysis) -> str:
     for ns in sorted(an.nodes, key=lambda x: _short(x.node)):
         L.append(f"-- {_short(ns.node)} " + "-" * 60)
         L.append(f"   {'round':>5} {'peer':<12} {'distance':<12} {'med BW':>8} "
-                 f"{'med lat(us)':>11} {'n':>5}")
+                 f"{'sd BW':>7} {'med lat(us)':>11} {'sd lat(us)':>10} {'n':>5}")
         for m in sorted(ns.matches, key=lambda x: x.round_index):
             L.append(f"   {m.round_index:>5} {_short(m.peer_node):<12} "
                      f"{m.locality:<12} {_g(m.median_bw_gbs):>8} "
-                     f"{_us(m.median_lat_s):>11} {m.n:>5}")
+                     f"{_g(m.std_bw_gbs):>7} {_us(m.median_lat_s):>11} "
+                     f"{_us(m.std_lat_s):>10} {m.n:>5}")
         L.append("")
     return "\n".join(L)
 
