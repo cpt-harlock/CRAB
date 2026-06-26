@@ -35,24 +35,39 @@ def _lat_line(s: Stat) -> str:
 def format_report(an: Analysis, outliers: OutlierResult,
                   topology_path: Optional[str]) -> str:
     p = an.params
+    collective = an.kind == "collective"
+    ops = sorted({m.op for m in an.dataset.matches}) or ["?"]
     L = []
     L.append("=" * 78)
-    L.append("TOURNAMENT RESULT ANALYSIS")
+    L.append("CINETIC RESULT ANALYSIS")
     L.append("=" * 78)
     L.append(f"exp dir        : {an.dataset.exp_dir}")
-    L.append(f"nodes / rounds : {len(an.dataset.nodes)} nodes, "
-             f"{an.dataset.n_rounds} rounds, {len(an.pairings)} pairings")
-    L.append(f"params         : msg_size={p.msg_size} window={p.window} "
-             f"granularity={p.granularity}  [source: {p.source}]")
-    L.append(f"bytes/sample   : {p.bytes_per_sample} (full-duplex aggregate)")
+    L.append(f"benchmark      : {','.join(ops)}  ({an.kind})")
+    if collective:
+        L.append(f"nodes / samples: {len(an.dataset.nodes)} nodes, "
+                 f"{len(an.dataset.matches)} per-node series, "
+                 f"{len(an.comm_span)} communicator(s)")
+    else:
+        L.append(f"nodes / rounds : {len(an.dataset.nodes)} nodes, "
+                 f"{an.dataset.n_rounds} rounds, {len(an.pairings)} pairings")
+        L.append(f"params         : msg_size={p.msg_size} window={p.window} "
+                 f"granularity={p.granularity}  [source: {p.source}]")
+        L.append(f"bytes/sample   : {p.bytes_per_sample} (params fallback)")
     L.append(f"topology       : {topology_path or '(none — locality skipped)'}")
     L.append("")
-    L.append("NOTE: bandwidth is full-duplex aggregate, decimal GB/s "
-             "(unidirectional = half).")
-    lat_note = ("accurate latency only when window==1; here window=%d, so it is an "
-                "amortized per-iteration time." % p.window) if p.window != 1 else \
-        "window==1: per-iteration latency is a true round-trip time."
-    L.append(f"      latency = duration/(window*gran); {lat_note}")
+    if collective:
+        L.append("NOTE: bandwidth is per-rank bus-bandwidth (busbw), decimal GB/s, "
+                 "from the benchmark's `bytes` basis.")
+        L.append("      latency = per-op completion time (gated by the slowest "
+                 "rank in the collective).")
+    else:
+        L.append("NOTE: bandwidth is full-duplex aggregate, decimal GB/s "
+                 "(unidirectional = half).")
+        lat_note = ("accurate latency only when window==1; here window=%d, so it "
+                    "is an amortized per-iteration time." % p.window) \
+            if p.window != 1 else \
+            "window==1: per-iteration latency is a true round-trip time."
+        L.append(f"      latency = duration/(window*gran); {lat_note}")
 
     if an.dataset.wrapped:
         L.append("      WARNING: ring-buffer wrap suspected — early rounds may be "
@@ -64,25 +79,38 @@ def format_report(an: Analysis, outliers: OutlierResult,
     L.append(f"latency   : {_lat_line(an.overall_lat)}")
     L.append("")
 
-    L.append("-- BANDWIDTH BY TOPOLOGY DISTANCE " + "-" * 44)
+    dist_title = "BANDWIDTH BY COMM SPAN" if collective \
+        else "BANDWIDTH BY TOPOLOGY DISTANCE"
+    L.append(f"-- {dist_title} " + "-" * (76 - len(dist_title)))
     if an.by_locality:
         for label in ("same_switch", "same_cell", "cross_cell", "unknown"):
             if label in an.by_locality:
                 L.append(f"  {label:<12}: {_bw_line(an.by_locality[label])}")
     else:
-        L.append("  (no pairings)")
+        L.append("  (no samples)")
     L.append("")
 
-    L.append("-- PER ROUND " + "-" * 65)
-    L.append(f"  {'rnd':>3} {'pairs':>5} {'sw':>3} {'cell':>4} {'cross':>5} "
-             f"{'unk':>3}  {'med BW':>8}  {'med lat(us)':>11}")
-    for r in an.rounds:
-        m = r.mix
-        L.append(f"  {r.round_index:>3} {r.n_pairings:>5} "
-                 f"{m.get('same_switch', 0):>3} {m.get('same_cell', 0):>4} "
-                 f"{m.get('cross_cell', 0):>5} {m.get('unknown', 0):>3}  "
-                 f"{_g(r.bw.median):>8}  {_us(r.lat.median):>11}")
-    L.append("")
+    if collective:
+        L.append("-- PER COMMUNICATOR " + "-" * 58)
+        L.append(f"  {'comm':>4} {'span':<12} {'members':>7}")
+        for cid in sorted(an.comm_span):
+            members = an.dataset.comms.get(cid, [])
+            L.append(f"  {cid:>4} {an.comm_span[cid]:<12} {len(members):>7}")
+        L.append("  NOTE: a single communicator yields one span bucket; run the "
+                 "collective over")
+        L.append("        sub-comms of differing span to populate the span axis.")
+        L.append("")
+    else:
+        L.append("-- PER ROUND " + "-" * 65)
+        L.append(f"  {'rnd':>3} {'pairs':>5} {'sw':>3} {'cell':>4} {'cross':>5} "
+                 f"{'unk':>3}  {'med BW':>8}  {'med lat(us)':>11}")
+        for r in an.rounds:
+            m = r.mix
+            L.append(f"  {r.round_index:>3} {r.n_pairings:>5} "
+                     f"{m.get('same_switch', 0):>3} {m.get('same_cell', 0):>4} "
+                     f"{m.get('cross_cell', 0):>5} {m.get('unknown', 0):>3}  "
+                     f"{_g(r.bw.median):>8}  {_us(r.lat.median):>11}")
+        L.append("")
 
     L.append("-- PER NODE (sorted by bandwidth) " + "-" * 44)
     L.append(f"  {'node':<28} {'med BW':>8} {'uni':>7} {'sd BW':>7} "
@@ -96,17 +124,18 @@ def format_report(an: Analysis, outliers: OutlierResult,
                  f"{ns.bw.n:>5}{mark}")
     L.append("")
 
-    L.append("-- PER-NODE PEER PROFILE (summary) " + "-" * 43)
-    L.append("  how each node's bandwidth splits across its peers:")
-    for ns in sorted(an.nodes, key=lambda x: x.median_bw_gbs):
-        if ns.profile is None:
-            continue
-        flag = "" if ns.profile.classification in ("uniform",) else "  <--"
-        L.append(f"  {_short(ns.node):<12} {ns.profile.classification:<12} "
-                 f"{ns.profile.note}{flag}")
-    L.append("  (full per-peer and per-round tables: see the analysis dir / "
-             "--detail)")
-    L.append("")
+    if not collective:
+        L.append("-- PER-NODE PEER PROFILE (summary) " + "-" * 43)
+        L.append("  how each node's bandwidth splits across its peers:")
+        for ns in sorted(an.nodes, key=lambda x: x.median_bw_gbs):
+            if ns.profile is None:
+                continue
+            flag = "" if ns.profile.classification in ("uniform",) else "  <--"
+            L.append(f"  {_short(ns.node):<12} {ns.profile.classification:<12} "
+                     f"{ns.profile.note}{flag}")
+        L.append("  (full per-peer and per-round tables: see the analysis dir / "
+                 "--detail)")
+        L.append("")
 
     L.append("-- UNDER-PERFORMING NODES " + "-" * 52)
     L.append(f"  method: {outliers.method}")
@@ -178,6 +207,9 @@ def build_summary(an: Analysis, outliers: OutlierResult) -> dict:
     p = an.params
     return {
         "exp_dir": an.dataset.exp_dir,
+        "kind": an.kind,
+        "ops": sorted({m.op for m in an.dataset.matches}),
+        "comm_span": an.comm_span,
         "n_nodes": len(an.dataset.nodes),
         "n_rounds": an.dataset.n_rounds,
         "n_pairings": len(an.pairings),

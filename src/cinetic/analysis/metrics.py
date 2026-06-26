@@ -40,17 +40,37 @@ def summarize(values) -> Stat:
                 p95=float(np.percentile(a, 95)))
 
 
-def bandwidth_gbs(durations, params: Params) -> np.ndarray:
-    """Full-duplex aggregate bandwidth in decimal GB/s, elementwise."""
+def _finite_pos(x) -> bool:
+    return x is not None and x == x and x > 0   # guards None and NaN (x==x is False for NaN)
+
+
+def bandwidth_gbs(durations, params: Params, bytes_per_sample=None) -> np.ndarray:
+    """Bandwidth in decimal GB/s, elementwise. Uses the per-sample byte basis
+    when given (the standardized ``bytes`` column), else the params-derived
+    full-duplex aggregate (legacy tournament files)."""
     d = np.asarray(durations, dtype=float)
+    bps = bytes_per_sample if _finite_pos(bytes_per_sample) else params.bytes_per_sample
     with np.errstate(divide="ignore", invalid="ignore"):
-        return params.bytes_per_sample / d / 1e9
+        return bps / d / 1e9
 
 
-def latency_s(durations, params: Params) -> np.ndarray:
-    """Per-iteration latency in seconds, elementwise."""
+def latency_s(durations, params: Params, ops_per_sample=None) -> np.ndarray:
+    """Per-iteration latency in seconds, elementwise. Uses the per-sample op
+    basis when given (the standardized ``ops`` column), else
+    ``window*granularity`` (legacy tournament files)."""
     d = np.asarray(durations, dtype=float)
-    return d / (params.window * params.granularity)
+    ops = ops_per_sample if _finite_pos(ops_per_sample) else (params.window * params.granularity)
+    return d / ops
+
+
+def match_bw(m, params: Params) -> np.ndarray:
+    """Bandwidth series for one Match, using its embedded byte basis if present."""
+    return bandwidth_gbs(m.durations, params, getattr(m, "bytes_per_sample", None))
+
+
+def match_lat(m, params: Params) -> np.ndarray:
+    """Latency series for one Match, using its embedded op basis if present."""
+    return latency_s(m.durations, params, getattr(m, "ops_per_sample", None))
 
 
 # ---------------------------------------------------------------------------
@@ -66,6 +86,8 @@ class Pairing:
     skew: float = 0.0                # mean |A-B| duration, a sync diagnostic
     locality: Optional[object] = None
     label: str = "unknown"
+    bytes_per_sample: float = float("nan")   # bandwidth basis (from the match)
+    ops_per_sample: float = float("nan")     # latency basis (from the match)
 
 
 @dataclass
@@ -131,6 +153,14 @@ class Analysis:
     by_locality: Dict[str, Stat]
     node_bw_median: Dict[str, float]
     warnings: List[str] = field(default_factory=list)
+    # "pairwise" or "collective" — drives which views apply
+    kind: str = "pairwise"
+    # bandwidth/latency samples bucketed by locality (pairwise) or comm-span
+    # (collective) label; the unit feeding the "by locality/span" views
+    bw_by_label: Dict[str, np.ndarray] = field(default_factory=dict)
+    lat_by_label: Dict[str, np.ndarray] = field(default_factory=dict)
+    # comm id -> span label (collective only)
+    comm_span: Dict[int, str] = field(default_factory=dict)
 
 
 def build_pairings(ds: Dataset, params: Params,
@@ -175,7 +205,9 @@ def build_pairings(ds: Dataset, params: Params,
         loc = resolver.locality(na, nb)
         pairings.append(Pairing(round_index=m.round_index, node_a=na, node_b=nb,
                                 rank_a=a, rank_b=b, durations=merged, skew=skew,
-                                locality=loc, label=locality_label(loc)))
+                                locality=loc, label=locality_label(loc),
+                                bytes_per_sample=m.bytes_per_sample,
+                                ops_per_sample=m.ops_per_sample))
     return pairings, warnings
 
 
@@ -218,19 +250,20 @@ def _classify_peer_profile(match_stats: List["MatchStat"],
 
 
 def _node_stats(node: str, matches: List[Match], params: Params,
-                resolver: TopoResolver) -> NodeStats:
-    all_d = np.concatenate([np.asarray(m.durations, dtype=float)
-                            for m in matches]) if matches else np.array([])
-    bw = summarize(bandwidth_gbs(all_d, params))
-    lat = summarize(latency_s(all_d, params))
-
+                label_fn) -> NodeStats:
+    """Per-node bandwidth/latency. ``label_fn(match)`` gives the locality (pairwise)
+    or comm-span (collective) label. Bandwidth/latency use each match's embedded
+    byte/op basis (falling back to params for legacy files)."""
+    bw_all: List[np.ndarray] = []
+    lat_all: List[np.ndarray] = []
     by_loc: Dict[str, List[float]] = {}
     match_stats: List[MatchStat] = []
     for m in matches:
-        loc = resolver.locality(m.node, m.peer_node)
-        label = locality_label(loc)
-        mbw = bandwidth_gbs(m.durations, params)
-        mlat = latency_s(m.durations, params)
+        label = label_fn(m)
+        mbw = match_bw(m, params)
+        mlat = match_lat(m, params)
+        bw_all.append(mbw)
+        lat_all.append(mlat)
         by_loc.setdefault(label, []).extend(mbw.tolist())
         match_stats.append(MatchStat(
             round_index=m.round_index, peer_node=m.peer_node,
@@ -239,6 +272,8 @@ def _node_stats(node: str, matches: List[Match], params: Params,
             median_lat_s=float(np.median(mlat)) if mlat.size else float("nan"),
             std_bw_gbs=float(np.std(mbw)) if mbw.size else float("nan"),
             std_lat_s=float(np.std(mlat)) if mlat.size else float("nan")))
+    bw = summarize(np.concatenate(bw_all) if bw_all else np.array([]))
+    lat = summarize(np.concatenate(lat_all) if lat_all else np.array([]))
     by_locality = {k: summarize(v) for k, v in by_loc.items()}
     match_stats.sort(key=lambda s: s.round_index)
 
@@ -250,39 +285,74 @@ def _node_stats(node: str, matches: List[Match], params: Params,
 
 def analyze(ds: Dataset, params: Params, resolver: TopoResolver) -> Analysis:
     resolver.check_coverage(ds.nodes)
-    pairings, pair_warn = build_pairings(ds, params, resolver)
+    collective = ds.is_collective
 
-    # per node (directed matches)
-    nodes = [_node_stats(node, ms, params, resolver)
+    # Per-sample label: pairwise -> locality of (node, peer); collective -> the
+    # communicator's span class (from the manifest). Computed once per comm.
+    span = {cid: resolver.comm_span(members) for cid, members in ds.comms.items()}
+
+    def label_fn(m: Match) -> str:
+        if m.is_collective:
+            return span.get(m.comm, "unknown")
+        return locality_label(resolver.locality(m.node, m.peer_node))
+
+    # per node (directed matches / per-node collective samples)
+    nodes = [_node_stats(node, ms, params, label_fn)
              for node, ms in sorted(ds.matches_by_node().items())]
     node_bw_median = {ns.node: ns.median_bw_gbs for ns in nodes}
 
-    # per round (one value per pairing-sample)
+    pairings: List[Pairing] = []
     rounds: List[RoundStats] = []
-    for r in sorted({p.round_index for p in pairings}):
-        ps = [p for p in pairings if p.round_index == r]
-        mix: Dict[str, int] = {}
-        for p in ps:
-            mix[p.label] = mix.get(p.label, 0) + 1
-        d = np.concatenate([p.durations for p in ps]) if ps else np.array([])
-        rounds.append(RoundStats(round_index=r, n_pairings=len(ps), mix=mix,
-                                  bw=summarize(bandwidth_gbs(d, params)),
-                                  lat=summarize(latency_s(d, params))))
+    pair_warn: List[str] = []
+    bw_by_label: Dict[str, list] = {}
+    lat_by_label: Dict[str, list] = {}
 
-    # overall + by-locality (over pairings)
-    all_pair_d = (np.concatenate([p.durations for p in pairings])
-                  if pairings else np.array([]))
-    overall_bw = summarize(bandwidth_gbs(all_pair_d, params))
-    overall_lat = summarize(latency_s(all_pair_d, params))
+    if collective:
+        # No pairs: each node's per-sample bandwidth/latency, bucketed by the
+        # communicator's span. (One value per node-sample; no merge/double-count
+        # question since there are no peer pairs.)
+        for m in ds.matches:
+            lab = label_fn(m)
+            bw_by_label.setdefault(lab, []).extend(match_bw(m, params).tolist())
+            lat_by_label.setdefault(lab, []).extend(match_lat(m, params).tolist())
+    else:
+        pairings, pair_warn = build_pairings(ds, params, resolver)
+        # per round (one value per pairing-sample)
+        for r in sorted({p.round_index for p in pairings}):
+            ps = [p for p in pairings if p.round_index == r]
+            mix: Dict[str, int] = {}
+            for p in ps:
+                mix[p.label] = mix.get(p.label, 0) + 1
+            bw = np.concatenate([bandwidth_gbs(p.durations, params,
+                                               p.bytes_per_sample) for p in ps]) \
+                if ps else np.array([])
+            lat = np.concatenate([latency_s(p.durations, params,
+                                            p.ops_per_sample) for p in ps]) \
+                if ps else np.array([])
+            rounds.append(RoundStats(round_index=r, n_pairings=len(ps), mix=mix,
+                                      bw=summarize(bw), lat=summarize(lat)))
+        # by-locality over pairings (one merged value per pair-sample)
+        for p in pairings:
+            bw_by_label.setdefault(p.label, []).extend(
+                bandwidth_gbs(p.durations, params, p.bytes_per_sample).tolist())
+            lat_by_label.setdefault(p.label, []).extend(
+                latency_s(p.durations, params, p.ops_per_sample).tolist())
 
-    by_loc: Dict[str, List[float]] = {}
-    for p in pairings:
-        by_loc.setdefault(p.label, []).extend(
-            bandwidth_gbs(p.durations, params).tolist())
-    by_locality = {k: summarize(v) for k, v in by_loc.items()}
+    bw_by_label = {k: np.asarray(v, dtype=float) for k, v in bw_by_label.items()}
+    lat_by_label = {k: np.asarray(v, dtype=float) for k, v in lat_by_label.items()}
+    all_bw = (np.concatenate(list(bw_by_label.values()))
+              if bw_by_label else np.array([]))
+    all_lat = (np.concatenate(list(lat_by_label.values()))
+               if lat_by_label else np.array([]))
+    overall_bw = summarize(all_bw)
+    overall_lat = summarize(all_lat)
+    by_locality = {k: summarize(v) for k, v in bw_by_label.items()}
 
     warnings = list(ds.warnings) + list(resolver.warnings) + pair_warn
     return Analysis(dataset=ds, params=params, resolver=resolver, pairings=pairings,
                     nodes=nodes, rounds=rounds, overall_bw=overall_bw,
                     overall_lat=overall_lat, by_locality=by_locality,
-                    node_bw_median=node_bw_median, warnings=warnings)
+                    node_bw_median=node_bw_median, warnings=warnings,
+                    kind="collective" if collective else "pairwise",
+                    bw_by_label=bw_by_label, lat_by_label=lat_by_label,
+                    comm_span=span)

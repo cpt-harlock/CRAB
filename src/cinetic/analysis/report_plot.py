@@ -42,12 +42,12 @@ _METRIC = {
 }
 
 
-def _metric_samples(durations, params, kind: str) -> list:
-    """Pairing durations -> metric samples: GB/s for bandwidth, microseconds
-    for latency."""
+def _pairing_samples(pr, params, kind: str) -> list:
+    """One pairing -> metric samples (GB/s for bandwidth, microseconds for
+    latency), using the pairing's embedded byte/op basis."""
     if kind == "latency":
-        return (latency_s(durations, params) * 1e6).tolist()
-    return bandwidth_gbs(durations, params).tolist()
+        return (latency_s(pr.durations, params, pr.ops_per_sample) * 1e6).tolist()
+    return bandwidth_gbs(pr.durations, params, pr.bytes_per_sample).tolist()
 
 
 def _short(node: str) -> str:
@@ -150,28 +150,29 @@ def generate_plots(an: Analysis, outliers: OutlierResult, outdir: str,
         paths.append(p)
         plt.close(fig)
 
-    # 5. pairwise bandwidth heatmap ---------------------------------------
-    p = _plot_heatmap(an, outdir, plt)
-    if p:
-        paths.append(p)
+    # 5. pairwise bandwidth heatmap (pairwise only) -----------------------
+    if an.pairings:
+        p = _plot_heatmap(an, outdir, plt)
+        if p:
+            paths.append(p)
 
-    # 6. bandwidth & latency CDFs -----------------------------------------
+    # 6. bandwidth & latency CDFs (both kinds) ----------------------------
     p = _plot_cdf(an, outliers, outdir, plt)
     if p:
         paths.append(p)
 
-    # 7. per-round bandwidth box plot -------------------------------------
+    # 7. per-round bandwidth box plot (pairwise only) ---------------------
     p = _plot_round_box(an, outdir, plt)
     if p:
         paths.append(p)
 
-    # 8. one-glance overview ----------------------------------------------
-    p = _plot_overview(an, outliers, outdir, plt)
+    # 8. one-glance overview (pairwise only; collective views are above) --
+    p = _plot_overview(an, outliers, outdir, plt) if an.pairings else ""
     if p:
         paths.append(p)
 
     # 9. (opt) topology node-link diagram ---------------------------------
-    if topo_graph:
+    if topo_graph and an.pairings:
         p = _plot_topo_graph(an, outliers, outdir, plt)
         if p:
             paths.append(p)
@@ -182,13 +183,16 @@ def generate_plots(an: Analysis, outliers: OutlierResult, outdir: str,
 
 
 def _plot_metric_by_locality(an: Analysis, outdir: str, plt, kind: str) -> str:
-    """Box plot of a metric (bandwidth or latency) grouped by topology distance,
-    with a dashed line at the overall average across all pairings."""
+    """Box plot of a metric (bandwidth or latency) grouped by topology distance
+    (pairwise) or communicator span (collective), with a dashed line at the
+    overall average. Reads the precomputed per-label sample buckets, so it works
+    for both kinds and uses the standardized byte/op basis."""
     m = _METRIC[kind]
-    by_loc = {lab: [] for lab in _LOC_ORDER}
-    for pr in an.pairings:
-        by_loc[pr.label].extend(_metric_samples(pr.durations, an.params, kind))
-    present = [lab for lab in _LOC_ORDER if by_loc[lab]]
+    src = an.bw_by_label if kind == "bandwidth" else an.lat_by_label
+    scale = 1e6 if kind == "latency" else 1.0          # latency stored in seconds
+    by_loc = {lab: (np.asarray(src[lab], dtype=float) * scale)
+              for lab in _LOC_ORDER if lab in src and len(src[lab])}
+    present = [lab for lab in _LOC_ORDER if lab in by_loc and by_loc[lab].size]
     if not present:
         return ""
 
@@ -249,8 +253,7 @@ def _plot_locality_by_config(an: Analysis, outdir: str, plt, kind: str) -> str:
         by_loc = {lab: [] for lab in _LOC_ORDER}
         for pr in an.pairings:
             if pr.round_index in rset:
-                by_loc[pr.label].extend(
-                    _metric_samples(pr.durations, an.params, kind))
+                by_loc[pr.label].extend(_pairing_samples(pr, an.params, kind))
         present = [lab for lab in _LOC_ORDER if by_loc[lab]]
         avg = None
         if present:
@@ -562,10 +565,12 @@ def _plot_heatmap(an: Analysis, outdir: str, plt) -> str:
 
 
 def _plot_cdf(an: Analysis, outliers, outdir: str, plt) -> str:
-    bw = np.concatenate([bandwidth_gbs(p.durations, an.params)
-                         for p in an.pairings]) if an.pairings else np.array([])
-    lat = np.concatenate([(p.durations / (an.params.window * an.params.granularity))
-                          for p in an.pairings]) if an.pairings else np.array([])
+    # Use the precomputed per-label buckets so this works for pairwise and
+    # collective alike (bandwidth in GB/s, latency in seconds).
+    bw = (np.concatenate(list(an.bw_by_label.values()))
+          if an.bw_by_label else np.array([]))
+    lat = (np.concatenate(list(an.lat_by_label.values()))
+           if an.lat_by_label else np.array([]))
     bw = bw[np.isfinite(bw)]
     lat = lat[np.isfinite(lat)]
     if bw.size == 0:

@@ -41,6 +41,25 @@ class TopoResolver:
         self.resolved.setdefault(host_b, b in self.topology.nodes)
         return self.topology.locality(a, b)
 
+    def comm_span(self, members: List[str]) -> str:
+        """Span class of a communicator = the coarsest (largest) pairwise
+        locality among its member nodes: ``same_switch`` if all share one switch,
+        ``same_cell`` if all within one cell, ``cross_cell`` if any pair crosses
+        cells. ``unknown`` if the topology is missing or any member is
+        unresolved. This is the collective analog of :meth:`locality`."""
+        if self.topology is None:
+            return "unknown"
+        if len(members) < 2:
+            return "same_switch"        # a 0/1-node comm spans nothing
+        worst = -1
+        for i in range(len(members)):
+            for j in range(i + 1, len(members)):
+                loc = self.locality(members[i], members[j])
+                if loc is None:
+                    return "unknown"
+                worst = max(worst, _SPAN_RANK[loc])
+        return _SPAN_BY_RANK[worst]
+
     def check_coverage(self, hosts: List[str], min_frac: float = 0.8) -> None:
         """Warn loudly if too few hosts resolve (likely the wrong topology file)."""
         if self.topology is None:
@@ -73,3 +92,9 @@ LOCALITY_LABEL = {
 
 def locality_label(loc: Optional[Locality]) -> str:
     return LOCALITY_LABEL.get(loc, "unknown")
+
+
+# Rank the three locality classes so a communicator's span = the worst (largest)
+# pairwise locality among its members.
+_SPAN_RANK = {Locality.SAME_SWITCH: 0, Locality.SAME_CELL: 1, Locality.CROSS_CELL: 2}
+_SPAN_BY_RANK = {0: "same_switch", 1: "same_cell", 2: "cross_cell"}
