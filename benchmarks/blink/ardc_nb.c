@@ -9,6 +9,7 @@
 #include <stdbool.h>
 #include <sched.h>
 #include "common.h"
+#include "results.h"
 
 int main(int argc, char** argv){
 
@@ -186,8 +187,18 @@ int main(int argc, char** argv){
 
     /*write results to file*/
     MPI_Barrier(MPI_COMM_WORLD);
+    /*standardized per-node dump. Collective: no single peer (peer set = the
+      comm, see comm_manifest.csv). One sample = measure_granularity allreduces;
+      busbw basis per allreduce is 2*(N-1)/N*msg_size.*/
+    {
+        double cin_n = (double)w_size;
+        cin_write_node_results(
+            "allreduce", 0, MPI_COMM_WORLD, durations, NULL, NULL,
+            measure_granularity * 2.0 * (cin_n - 1.0) / cin_n * (double)msg_size,
+            (double)measure_granularity, curr_iters, max_samples, warm_up_iters);
+    }
     write_results();
-    
+
     /*free allocated buffers*/
     free(durations);
     free(send_buf);
