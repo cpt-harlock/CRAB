@@ -23,11 +23,12 @@ def _g(x: float) -> str:
 def _bw_line(s: Stat) -> str:
     """One line describing a full-duplex bandwidth Stat (also unidirectional)."""
     return (f"median {_g(s.median)} GB/s (uni {_g(s.median / 2)})  "
-            f"mean {_g(s.mean)}  min {_g(s.vmin)}  max {_g(s.vmax)}  n={s.n}")
+            f"mean {_g(s.mean)}  sd {_g(s.std)}  "
+            f"min {_g(s.vmin)}  max {_g(s.vmax)}  n={s.n}")
 
 
 def _lat_line(s: Stat) -> str:
-    return (f"median {_us(s.median)} us  mean {_us(s.mean)}  "
+    return (f"median {_us(s.median)} us  mean {_us(s.mean)}  sd {_us(s.std)}  "
             f"p95 {_us(s.p95)}  min {_us(s.vmin)}  max {_us(s.vmax)}")
 
 
@@ -84,13 +85,14 @@ def format_report(an: Analysis, outliers: OutlierResult,
     L.append("")
 
     L.append("-- PER NODE (sorted by bandwidth) " + "-" * 44)
-    L.append(f"  {'node':<28} {'med BW':>8} {'uni':>7} {'med lat(us)':>11} "
-             f"{'n':>5}")
+    L.append(f"  {'node':<28} {'med BW':>8} {'uni':>7} {'sd BW':>7} "
+             f"{'med lat(us)':>11} {'sd lat(us)':>10} {'n':>5}")
     flagged_nodes = {f.node for f in outliers.flagged}
     for ns in sorted(an.nodes, key=lambda x: x.median_bw_gbs):
         mark = " *SLOW*" if ns.node in flagged_nodes else ""
         L.append(f"  {ns.node:<28} {_g(ns.median_bw_gbs):>8} "
-                 f"{_g(ns.median_bw_gbs / 2):>7} {_us(ns.median_lat_s):>11} "
+                 f"{_g(ns.median_bw_gbs / 2):>7} {_g(ns.bw.std):>7} "
+                 f"{_us(ns.median_lat_s):>11} {_us(ns.lat.std):>10} "
                  f"{ns.bw.n:>5}{mark}")
     L.append("")
 
@@ -140,11 +142,12 @@ def format_peer_profiles(an: Analysis) -> str:
         if ns.profile is not None:
             L.append(f"   profile: {ns.profile.classification} — {ns.profile.note}")
         L.append(f"   {'peer':<12} {'distance':<12} {'med BW':>8} {'uni':>7} "
-                 f"{'med lat(us)':>11} {'n':>5}")
+                 f"{'sd BW':>7} {'med lat(us)':>11} {'sd lat(us)':>10} {'n':>5}")
         for m in sorted(ns.matches, key=lambda x: x.median_bw_gbs):
             L.append(f"   {_short(m.peer_node):<12} {m.locality:<12} "
                      f"{_g(m.median_bw_gbs):>8} {_g(m.median_bw_gbs / 2):>7} "
-                     f"{_us(m.median_lat_s):>11} {m.n:>5}")
+                     f"{_g(m.std_bw_gbs):>7} {_us(m.median_lat_s):>11} "
+                     f"{_us(m.std_lat_s):>10} {m.n:>5}")
         L.append("")
     return "\n".join(L)
 
@@ -203,7 +206,9 @@ def build_summary(an: Analysis, outliers: OutlierResult) -> dict:
                    "matches": [{"round": m.round_index, "peer": m.peer_node,
                                 "peer_rank": m.peer_rank, "locality": m.locality,
                                 "median_bw_gbs": m.median_bw_gbs,
-                                "median_lat_s": m.median_lat_s, "n": m.n}
+                                "median_lat_s": m.median_lat_s,
+                                "std_bw_gbs": m.std_bw_gbs,
+                                "std_lat_s": m.std_lat_s, "n": m.n}
                                for m in ns.matches]} for ns in an.nodes],
         "outliers": {"method": outliers.method,
                      "low_confidence": outliers.low_confidence,

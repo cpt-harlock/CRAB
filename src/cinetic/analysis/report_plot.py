@@ -219,7 +219,7 @@ def _plot_locality_by_config(an: Analysis, outdir: str, plt) -> str:
         present = [lab for lab in _LOC_ORDER if by_loc[lab]]
         if present:
             bp = ax.boxplot([by_loc[lab] for lab in present], tick_labels=present,
-                            patch_artist=True, showfliers=False)
+                            patch_artist=True, showfliers=True)
             for patch, lab in zip(bp["boxes"], present):
                 patch.set_facecolor(_LOC_COLOR[lab])
                 patch.set_alpha(0.6)

@@ -79,6 +79,8 @@ class MatchStat:
     n: int
     median_bw_gbs: float
     median_lat_s: float
+    std_bw_gbs: float = float("nan")
+    std_lat_s: float = float("nan")
 
 
 @dataclass
@@ -234,7 +236,9 @@ def _node_stats(node: str, matches: List[Match], params: Params,
             round_index=m.round_index, peer_node=m.peer_node,
             peer_rank=m.peer_rank, locality=label, n=len(m.durations),
             median_bw_gbs=float(np.median(mbw)) if mbw.size else float("nan"),
-            median_lat_s=float(np.median(mlat)) if mlat.size else float("nan")))
+            median_lat_s=float(np.median(mlat)) if mlat.size else float("nan"),
+            std_bw_gbs=float(np.std(mbw)) if mbw.size else float("nan"),
+            std_lat_s=float(np.std(mlat)) if mlat.size else float("nan")))
     by_locality = {k: summarize(v) for k, v in by_loc.items()}
     match_stats.sort(key=lambda s: s.round_index)
 
