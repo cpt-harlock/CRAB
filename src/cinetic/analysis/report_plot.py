@@ -3,10 +3,12 @@
 Produces, into ``outdir``:
   1. per-node bandwidth bar chart (flagged nodes in red, global median line)
   2. per-node latency bar chart
-  3. bandwidth-vs-topology-distance box plot
+  3. bandwidth- and latency-vs-topology-distance box plots (overall average
+     drawn as a dashed line)
   3b. the same, "exploded": one box plot per round *configuration* (rounds
       grouped by identical per-locality pairing counts), so each locality's
-      bandwidth is shown under a fixed concurrent fabric load
+      bandwidth/latency is shown under a fixed concurrent fabric load, each
+      panel annotated with that configuration's average
   4. per-round topology-mix stacked bar with round median bandwidth overlaid
   5. pairwise bandwidth heatmap (node x peer, locality-colored borders)
   6. bandwidth & latency CDFs (slow region shaded)
@@ -22,12 +24,30 @@ from typing import List
 
 import numpy as np
 
-from .metrics import Analysis, bandwidth_gbs
+from .metrics import Analysis, bandwidth_gbs, latency_s
 from .outliers import OutlierResult
 
 _LOC_ORDER = ["same_switch", "same_cell", "cross_cell", "unknown"]
 _LOC_COLOR = {"same_switch": "#2ca02c", "same_cell": "#1f77b4",
               "cross_cell": "#d62728", "unknown": "#7f7f7f"}
+
+# Per-metric plotting config: how to turn a pairing's durations into samples,
+# plus axis label, title word, output-file stem and number format. Lets the
+# locality / by-config box plots be drawn for bandwidth and latency alike.
+_METRIC = {
+    "bandwidth": {"ylabel": "bandwidth (GB/s, full-duplex)", "title": "Bandwidth",
+                  "file": "bandwidth_by_locality", "fmt": ".2f"},
+    "latency":   {"ylabel": "per-iteration latency (us)", "title": "Latency",
+                  "file": "latency_by_locality", "fmt": ".1f"},
+}
+
+
+def _metric_samples(durations, params, kind: str) -> list:
+    """Pairing durations -> metric samples: GB/s for bandwidth, microseconds
+    for latency."""
+    if kind == "latency":
+        return (latency_s(durations, params) * 1e6).tolist()
+    return bandwidth_gbs(durations, params).tolist()
 
 
 def _short(node: str) -> str:
@@ -93,31 +113,14 @@ def generate_plots(an: Analysis, outliers: OutlierResult, outdir: str,
     paths.append(p)
     plt.close(fig)
 
-    # 3. bandwidth vs topology distance -----------------------------------
-    by_loc = {lab: [] for lab in _LOC_ORDER}
-    for pr in an.pairings:
-        by_loc[pr.label].extend(bandwidth_gbs(pr.durations, an.params).tolist())
-    present = [lab for lab in _LOC_ORDER if by_loc[lab]]
-    if present:
-        fig, ax = plt.subplots(figsize=(6, 4.5))
-        data = [by_loc[lab] for lab in present]
-        bp = ax.boxplot(data, tick_labels=present, patch_artist=True,
-                        showfliers=False)
-        for patch, lab in zip(bp["boxes"], present):
-            patch.set_facecolor(_LOC_COLOR[lab])
-            patch.set_alpha(0.6)
-        ax.set_ylabel("bandwidth (GB/s, full-duplex)")
-        ax.set_title("Bandwidth vs topology distance")
-        fig.tight_layout()
-        p = os.path.join(outdir, "bandwidth_by_locality.png")
-        fig.savefig(p, dpi=120)
-        paths.append(p)
-        plt.close(fig)
-
-    # 3b. exploded: bandwidth vs locality, per round configuration --------
-    p = _plot_locality_by_config(an, outdir, plt)
-    if p:
-        paths.append(p)
+    # 3. bandwidth / latency vs topology distance (overall + exploded) -----
+    for kind in ("bandwidth", "latency"):
+        p = _plot_metric_by_locality(an, outdir, plt, kind)
+        if p:
+            paths.append(p)
+        p = _plot_locality_by_config(an, outdir, plt, kind)
+        if p:
+            paths.append(p)
 
     # 4. per-round topology mix + median bandwidth ------------------------
     if an.rounds:
@@ -178,26 +181,58 @@ def generate_plots(an: Analysis, outliers: OutlierResult, outdir: str,
     return paths
 
 
-def _plot_locality_by_config(an: Analysis, outdir: str, plt) -> str:
-    """"Exploded" bandwidth-vs-locality: group rounds by identical topology
-    configuration (same per-locality pairing counts), then draw one
-    bandwidth-by-locality box plot per configuration.
+def _plot_metric_by_locality(an: Analysis, outdir: str, plt, kind: str) -> str:
+    """Box plot of a metric (bandwidth or latency) grouped by topology distance,
+    with a dashed line at the overall average across all pairings."""
+    m = _METRIC[kind]
+    by_loc = {lab: [] for lab in _LOC_ORDER}
+    for pr in an.pairings:
+        by_loc[pr.label].extend(_metric_samples(pr.durations, an.params, kind))
+    present = [lab for lab in _LOC_ORDER if by_loc[lab]]
+    if not present:
+        return ""
 
-    The aggregate plot (#3) pools every pairing sample by its own locality,
-    mixing samples taken under very different concurrent conditions (a
-    same_switch pair while everyone else is also same_switch vs. while everyone
-    else is cross_cell). Holding the round configuration fixed isolates each
-    locality's bandwidth under one fabric-load condition.
+    fig, ax = plt.subplots(figsize=(6, 4.5))
+    bp = ax.boxplot([by_loc[lab] for lab in present], tick_labels=present,
+                    patch_artist=True, showfliers=False)
+    for patch, lab in zip(bp["boxes"], present):
+        patch.set_facecolor(_LOC_COLOR[lab])
+        patch.set_alpha(0.6)
+
+    avg = float(np.mean(np.concatenate([np.asarray(by_loc[lab]) for lab in present])))
+    ax.axhline(avg, ls="--", color="k", lw=1, label=f"overall avg {avg:{m['fmt']}}")
+    ax.set_ylabel(m["ylabel"])
+    ax.set_title(f"{m['title']} vs topology distance")
+    ax.legend()
+    fig.tight_layout()
+    out = os.path.join(outdir, m["file"] + ".png")
+    fig.savefig(out, dpi=120)
+    plt.close(fig)
+    return out
+
+
+def _plot_locality_by_config(an: Analysis, outdir: str, plt, kind: str) -> str:
+    """"Exploded" metric-vs-locality: group rounds by identical topology
+    configuration (same per-locality pairing counts), then draw one
+    metric-by-locality box plot per configuration, each with a dashed line at
+    that configuration's average.
+
+    The aggregate plot pools every pairing sample by its own locality, mixing
+    samples taken under very different concurrent conditions (a same_switch pair
+    while everyone else is also same_switch vs. while everyone else is
+    cross_cell). Holding the round configuration fixed isolates each locality's
+    metric under one fabric-load condition.
     """
     if not an.rounds:
         return ""
 
+    m = _METRIC[kind]
     # group round indices by configuration signature
     groups: dict = {}
     for r in an.rounds:
         groups.setdefault(_config_signature(r), []).append(r.round_index)
     if len(groups) < 2:
-        # a single configuration -> identical to the aggregate plot (#3)
+        # a single configuration -> identical to the aggregate plot
         return ""
 
     sigs = sorted(groups)                       # deterministic panel order
@@ -215,28 +250,34 @@ def _plot_locality_by_config(an: Analysis, outdir: str, plt) -> str:
         for pr in an.pairings:
             if pr.round_index in rset:
                 by_loc[pr.label].extend(
-                    bandwidth_gbs(pr.durations, an.params).tolist())
+                    _metric_samples(pr.durations, an.params, kind))
         present = [lab for lab in _LOC_ORDER if by_loc[lab]]
+        avg = None
         if present:
             bp = ax.boxplot([by_loc[lab] for lab in present], tick_labels=present,
                             patch_artist=True, showfliers=True)
             for patch, lab in zip(bp["boxes"], present):
                 patch.set_facecolor(_LOC_COLOR[lab])
                 patch.set_alpha(0.6)
+            avg = float(np.mean(
+                np.concatenate([np.asarray(by_loc[lab]) for lab in present])))
+            ax.axhline(avg, ls="--", color="k", lw=0.8)
         nr = len(rset)
-        ax.set_title(f"{_config_label(sig)}\n({nr} round{'s' if nr != 1 else ''})",
-                     fontsize=8)
+        avg_str = f", avg {avg:{m['fmt']}}" if avg is not None else ""
+        ax.set_title(
+            f"{_config_label(sig)}\n({nr} round{'s' if nr != 1 else ''}{avg_str})",
+            fontsize=8)
         ax.tick_params(axis="x", rotation=45, labelsize=8)
 
     # turn off any empty panels in the grid
     for idx in range(n, nrows * ncols):
         axes[idx // ncols][idx % ncols].axis("off")
     for row in range(nrows):
-        axes[row][0].set_ylabel("bandwidth (GB/s, full-duplex)")
+        axes[row][0].set_ylabel(m["ylabel"])
 
-    fig.suptitle("Bandwidth vs topology distance, by round configuration")
+    fig.suptitle(f"{m['title']} vs topology distance, by round configuration")
     fig.tight_layout()
-    out = os.path.join(outdir, "bandwidth_by_locality_by_config.png")
+    out = os.path.join(outdir, m["file"] + "_by_config.png")
     fig.savefig(out, dpi=120)
     plt.close(fig)
     return out
