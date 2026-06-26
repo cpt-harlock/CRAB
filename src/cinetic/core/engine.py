@@ -89,6 +89,43 @@ def check_CI(container_list: List[DataContainer], alpha: float, beta: float, con
             check = check and container.converged
     return check
 
+# Loader / search-path variables that the job's header (`module load …`) and
+# venv activation set up on the compute node. environment.json is a snapshot
+# taken at orchestration time (login node, before any module load), so applying
+# it wholesale would clobber these and hide binaries like mpirun. For these we
+# merge instead of overwrite.
+_LOADER_VARS = (
+    "PATH", "LD_LIBRARY_PATH", "LD_RUN_PATH", "LIBRARY_PATH",
+    "CPATH", "C_INCLUDE_PATH", "CPLUS_INCLUDE_PATH",
+    "PKG_CONFIG_PATH", "MANPATH",
+)
+
+
+def _merge_pathlike(live: str, saved: str) -> str:
+    """Union two ``:``-separated path lists, live entries first (so module /
+    venv setup wins), then saved entries not already present."""
+    out: List[str] = []
+    for part in live.split(os.pathsep) + saved.split(os.pathsep):
+        if part and part not in out:
+            out.append(part)
+    return os.pathsep.join(out)
+
+
+def _merge_worker_env(live: Dict[str, str], saved: Dict[str, str]) -> Dict[str, str]:
+    """Build the env to apply in the worker: the saved snapshot, except the
+    loader/search-path vars (`_LOADER_VARS`) are merged with the live job-shell
+    values rather than overwritten — otherwise the stale login-node snapshot
+    defeats the job header's `module load` and mpirun/etc. can't be found."""
+    merged = dict(saved)
+    for key in _LOADER_VARS:
+        live_v, saved_v = live.get(key), saved.get(key)
+        if live_v and saved_v:
+            merged[key] = _merge_pathlike(live_v, saved_v)
+        elif live_v:
+            merged[key] = live_v
+    return merged
+
+
 def run_job(job, wlmanager, ppn: int, pre_commands: List[str] = None):
     """launches an application process via the workload manager."""
     if not job.node_list:
@@ -808,9 +845,9 @@ class Engine:
 
     def _run_worker(self, config: Dict[str, Any], environment: Dict[str, Any], output_dir: str):
         self.log("--- [WORKER] Started ---")
-        
+
         orig_env = os.environ.copy()
-        os.environ.update(environment)
+        os.environ.update(_merge_worker_env(orig_env, environment))
         
         try:
             node_file = "worker_nodelist.txt"
