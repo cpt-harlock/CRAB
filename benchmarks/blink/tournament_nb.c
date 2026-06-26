@@ -382,6 +382,7 @@ int main(int argc, char **argv) {
       2.0 * window * msg_size * measure_granularity,
       (double)window * measure_granularity, curr_iters, max_samples,
       warm_up_iters);
+  cin_write_manifest(0); /* single communicator: COMM_WORLD */
   write_results();
 
   /*report window timeouts across all ranks (stderr: stdout is parsed as CSV)*/

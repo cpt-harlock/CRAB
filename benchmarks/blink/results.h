@@ -46,28 +46,69 @@ static const char *cin_results_dir(void) {
   return d;
 }
 
-/* World rank 0 records this comm's membership into comm_manifest.csv. comm_id 0
-   (re)creates the file with a header; comm_id > 0 appends a block. For a single
-   COMM_WORLD run this yields the full node membership in one block.
-   NOTE: only correct when world rank 0 is a member of `comm` (always true for
-   COMM_WORLD). Sub-comm aggregation across disjoint comms is a later milestone. */
-static void cin_write_manifest(int comm_id, int comm_size,
-                               const char *all_names) {
-  int world_rank;
-  MPI_Comm_rank(MPI_COMM_WORLD, &world_rank);
-  if (world_rank != 0)
+/* Write comm_manifest.csv (comm,rank,node) for the whole job, race-free.
+ *
+ * Each world rank passes the id of the communicator it ran the op on
+ * (``my_comm_id``); every rank in the same communicator must pass the same id,
+ * and the ids must be unique across distinct communicators (e.g. the
+ * MPI_Comm_split color). All ids + hostnames are gathered to WORLD rank 0, which
+ * groups ranks by id (members in ascending world-rank order — matching
+ * MPI_Comm_split's key ordering) and writes the file **once**. This supports
+ * many sub-communicators (a split sweep) without the multiple concurrent
+ * writers the old per-comm writer had.
+ *
+ * Collective: call from every rank of MPI_COMM_WORLD after a barrier. */
+static void cin_write_manifest(int my_comm_id) {
+  int wrank, wsize;
+  MPI_Comm_rank(MPI_COMM_WORLD, &wrank);
+  MPI_Comm_size(MPI_COMM_WORLD, &wsize);
+
+  char proc[MPI_MAX_PROCESSOR_NAME];
+  int nl = 0;
+  memset(proc, 0, sizeof(proc));
+  if (MPI_Get_processor_name(proc, &nl) != MPI_SUCCESS)
+    snprintf(proc, sizeof(proc), "unknown");
+
+  char *names = NULL;
+  int *ids = NULL;
+  if (wrank == 0) {
+    names = (char *)malloc((size_t)wsize * MPI_MAX_PROCESSOR_NAME);
+    ids = (int *)malloc(sizeof(int) * wsize);
+    if (names == NULL || ids == NULL) {
+      fprintf(stderr, "Failed to allocate manifest buffer\n");
+      MPI_Abort(MPI_COMM_WORLD, 1);
+    }
+  }
+  MPI_Gather(proc, MPI_MAX_PROCESSOR_NAME, MPI_CHAR, names,
+             MPI_MAX_PROCESSOR_NAME, MPI_CHAR, 0, MPI_COMM_WORLD);
+  MPI_Gather(&my_comm_id, 1, MPI_INT, ids, 1, MPI_INT, 0, MPI_COMM_WORLD);
+
+  if (wrank != 0)
     return;
   char path[4096];
   snprintf(path, sizeof(path), "%s/comm_manifest.csv", cin_results_dir());
-  FILE *m = fopen(path, comm_id == 0 ? "w" : "a");
-  if (m == NULL)
-    return;
-  if (comm_id == 0)
+  FILE *m = fopen(path, "w");
+  if (m != NULL) {
     fprintf(m, "comm,rank,node\n");
-  for (int r = 0; r < comm_size; r++)
-    fprintf(m, "%d,%d,%s\n", comm_id, r,
-            &all_names[(size_t)r * MPI_MAX_PROCESSOR_NAME]);
-  fclose(m);
+    char *done = (char *)calloc((size_t)wsize, 1);
+    for (int r = 0; r < wsize; r++) {
+      if (done && done[r])
+        continue;
+      int id = ids[r], sub = 0;
+      for (int s = r; s < wsize; s++) {
+        if (ids[s] == id) {
+          fprintf(m, "%d,%d,%s\n", id, sub++,
+                  &names[(size_t)s * MPI_MAX_PROCESSOR_NAME]);
+          if (done)
+            done[s] = 1;
+        }
+      }
+    }
+    free(done);
+    fclose(m);
+  }
+  free(names);
+  free(ids);
 }
 
 /* Write this rank's measured samples to node_<host>_rank<r>.csv in the unified
@@ -146,8 +187,6 @@ static void cin_write_node_results(const char *op, int comm_id, MPI_Comm comm,
             durations[idx]);
   }
   fclose(f);
-
-  cin_write_manifest(comm_id, comm_size, all_names);
   free(all_names);
 }
 

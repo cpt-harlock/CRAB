@@ -33,6 +33,7 @@ int main(int argc, char** argv){
     
     warm_up_iters=5;
     int max_iters=1;
+    int splitsize=0;   /*0 => COMM_WORLD; >0 => groups of this many ranks*/
     bool endless=false;
     
     double burst_length=0.0;
@@ -79,6 +80,9 @@ int main(int argc, char** argv){
         }else if(strcmp(argv[i],"-maxsamples")==0){
             ++i;
             max_samples=atoi(argv[i]);
+        }else if(strcmp(argv[i],"-splitsize")==0){
+            ++i;
+            splitsize=atoi(argv[i]);
         }else{
             if(my_rank==master_rank){
                 fprintf(stderr, "Unknown argument: %s\n", argv[i]);
@@ -88,10 +92,23 @@ int main(int argc, char** argv){
     }
     /*set seed such that all ranks share rands*/
     srand(rand_seed);
-    
+
     /*randomized master rank*/
     if(master_rand){
         master_rank=rand()%w_size;
+    }
+
+    /*optional sub-communicator split: run the collective on groups of
+      `splitsize` consecutive ranks (color = rank/splitsize), so one run yields
+      communicators of differing topology span. 0 => the whole COMM_WORLD.
+      Barriers stay over COMM_WORLD so all groups run concurrently.*/
+    MPI_Comm op_comm = MPI_COMM_WORLD;
+    int comm_id = 0;
+    int op_size = w_size;
+    if(splitsize > 0){
+        comm_id = my_rank / splitsize;
+        MPI_Comm_split(MPI_COMM_WORLD, comm_id, my_rank, &op_comm);
+        MPI_Comm_size(op_comm, &op_size);
     }
     
     /*pin to core*/
@@ -154,7 +171,7 @@ int main(int argc, char** argv){
                 MPI_Barrier(MPI_COMM_WORLD);
                 measure_start_time=MPI_Wtime();
                 for(i=0;i<measure_granularity;i++){
-                    MPI_Ialltoall(send_buf,msg_size,MPI_BYTE,recv_buf,msg_size,MPI_BYTE,MPI_COMM_WORLD,&requests[i]);
+                    MPI_Ialltoall(send_buf,msg_size,MPI_BYTE,recv_buf,msg_size,MPI_BYTE,op_comm,&requests[i]);
                 }
                 MPI_Waitall(measure_granularity,requests,MPI_STATUSES_IGNORE);
                 durations[curr_iters%max_samples]=MPI_Wtime()-measure_start_time; /*write result to buffer (lru space)*/
@@ -181,12 +198,17 @@ int main(int argc, char** argv){
       comm, see comm_manifest.csv). One sample = measure_granularity alltoalls;
       busbw basis per alltoall is 2*(N-1)*msg_size (sent to & recvd from N-1).*/
     {
-        double cin_n = (double)w_size;
+        double cin_n = (double)op_size;
+        double busbw = (cin_n > 1.0)
+            ? measure_granularity * 2.0 * (cin_n - 1.0) * (double)msg_size
+            : 0.0;
         cin_write_node_results(
-            "alltoall", 0, MPI_COMM_WORLD, durations, NULL, NULL,
-            measure_granularity * 2.0 * (cin_n - 1.0) * (double)msg_size,
-            (double)measure_granularity, curr_iters, max_samples, warm_up_iters);
+            "alltoall", comm_id, MPI_COMM_WORLD, durations, NULL, NULL,
+            busbw, (double)measure_granularity, curr_iters, max_samples,
+            warm_up_iters);
     }
+    cin_write_manifest(comm_id);
+    if(splitsize > 0) MPI_Comm_free(&op_comm);
     write_results();
 
     /*free allocated buffers*/
