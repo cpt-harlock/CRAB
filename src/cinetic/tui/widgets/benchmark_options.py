@@ -87,10 +87,6 @@ class BenchmarkOptions(VerticalScroll):
             yield Input(value="1", id="ppn", type="integer", classes="option-input")
 
         with Container(classes="option-group"):
-            yield Label("Converge All Metrics:", classes="option-label")
-            yield Switch(value=True, id="convergeall", classes="option-input")
-
-        with Container(classes="option-group"):
             yield Label("Output Format:", classes="option-label")
             yield Select([
                 ("CSV", "csv"),
