@@ -341,7 +341,7 @@ class ExperimentRunner:
 
         # WLM Loading
         wlm_name = self.ctx.wl_manager
-        wlm_path = f"./src/cinetic/core/wl_manager/{wlm_name}.py"
+        wlm_path = os.path.join(os.path.dirname(__file__), "wl_manager", f"{wlm_name}.py")
         self.wlmanager = load_module(wlm_path).wl_manager(self.ctx)
 
         # App Instantiation

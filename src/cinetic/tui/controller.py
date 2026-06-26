@@ -5,6 +5,7 @@ from typing import Callable, Dict
 # Import the engine and the models from the package.
 from ..core.engine import Engine
 from ..core.models import BenchmarkState
+from ..paths import repo_root
 
 LogCallback = Callable[[str], None]
 
@@ -19,8 +20,8 @@ class TUIController:
             tui_settings["CINETIC_SYSTEM"] = selected_preset
 
         for key, value in tui_settings.items():
-            if isinstance(value, str) and value == "__CWD__":
-                tui_settings[key] = os.getcwd() + "/"
+            if isinstance(value, str) and "__CWD__" in value:
+                tui_settings[key] = value.replace("__CWD__", repo_root())
         
         execution_env.update(tui_settings)
 

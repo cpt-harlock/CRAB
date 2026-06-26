@@ -7,6 +7,8 @@ from textual_fspicker import FileSave, FileOpen
 import json
 import os
 
+from cinetic.paths import presets_path
+
 from .messages import SaveConfiguration, LoadConfiguration, RunBenchmark
 from .widgets.tab_selector import TabSelector
 from .widgets.applications_setup import ApplicationSetup
@@ -56,7 +58,7 @@ class CineticApp(App):
     
     def _load_default_env(self):
         try:
-            with open("presets.json", "r") as f:
+            with open(presets_path(), "r") as f:
                 presets = json.load(f)
                 common_vars = presets.get("_common", {})
                 local_vars = presets.get("local", {})

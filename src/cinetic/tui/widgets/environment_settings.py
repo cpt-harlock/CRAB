@@ -3,6 +3,7 @@ from textual.containers import VerticalScroll, Horizontal, Container
 from textual.widgets import Button, Input, Select, Static, TabbedContent, TabPane, TextArea
 from textual.message import Message
 from .variable_row import VariableRow
+from cinetic.paths import env_path, presets_path
 import json
 import os
 
@@ -19,9 +20,9 @@ class EnvironmentSettings(Container):
         
         # Load logic (.env) remains same...
         selected_preset = ""
-        if os.path.exists(".env"):
+        if os.path.exists(env_path()):
             try:
-                with open(".env", "r") as f: selected_preset = f.read().strip()
+                with open(env_path(), "r") as f: selected_preset = f.read().strip()
             except: pass
         else: selected_preset = "local"
         
@@ -30,11 +31,11 @@ class EnvironmentSettings(Container):
 
     def _load_presets(self) -> dict:
         try:
-            with open("presets.json", "r") as f: return json.load(f)
+            with open(presets_path(), "r") as f: return json.load(f)
         except: return {"local": {"env": {}, "sbatch": [], "header": []}}
 
     def _save_presets(self):
-        with open("presets.json", "w") as f:
+        with open(presets_path(), "w") as f:
             json.dump(self.presets, f, indent=4)
 
     def compose(self) -> ComposeResult:

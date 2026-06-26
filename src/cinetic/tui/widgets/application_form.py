@@ -10,6 +10,7 @@ from textual.message import Message
 from textual_fspicker import FileOpen
 
 from .environment_settings import EnvironmentSettings
+from cinetic.paths import repo_root
 
 import os
 import json
@@ -79,10 +80,10 @@ class ApplicationForm(Vertical):
         """Default browse location: the CINETIC wrappers directory, if it exists."""
         raw = os.environ.get("CINETIC_WRAPPERS_PATH", "")
         if raw:
-            raw = raw.replace("__CWD__", os.getcwd())
+            raw = raw.replace("__CWD__", repo_root())
             candidate = os.path.expandvars(os.path.expanduser(raw))
         else:
-            candidate = os.path.join(os.getcwd(), "wrappers")
+            candidate = os.path.join(repo_root(), "wrappers")
         return candidate if os.path.isdir(candidate) else os.getcwd()
 
     @on(Button.Pressed, "#browse-path")

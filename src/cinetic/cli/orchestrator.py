@@ -11,9 +11,10 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..',
 
 from cinetic.compat import apply_legacy_env
 from cinetic.core.engine import Engine
+from cinetic.paths import env_path, presets_path, repo_root
 
 def load_environment_config(preset_arg: str) -> Dict[str, Any]:
-    presets_filename = "presets.json"
+    presets_filename = presets_path()
     print(f"Info: Loading preset '{preset_arg}' from {presets_filename}", flush=True)
     try:
         with open(presets_filename, 'r') as f:
@@ -57,7 +58,7 @@ def prepare_execution_environment(env_dict: Dict[str, str]) -> Dict[str, str]:
     
     for key, value in env_dict.items():
         if isinstance(value, str):
-            value = value.replace("__CWD__", os.getcwd())
+            value = value.replace("__CWD__", repo_root())
         processed_env[key] = str(value)
     
     execution_env.update(processed_env)
@@ -119,8 +120,8 @@ def orchestrate_main(argv=None) -> int:
 
     try:
         selected_preset = args.preset or os.environ.get("CINETIC_PRESET")
-        if os.path.exists(".env") and not selected_preset:
-            with open(".env", "r") as f:
+        if os.path.exists(env_path()) and not selected_preset:
+            with open(env_path(), "r") as f:
                 selected_preset = f.read().strip()
 
         if not selected_preset:

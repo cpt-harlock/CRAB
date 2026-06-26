@@ -8,6 +8,7 @@ import os
 
 from .topology_map import TopologyMapScreen
 from cinetic.topology import Topology
+from cinetic.paths import presets_path
 
 class BenchmarkOptions(VerticalScroll):
     """Un widget per configurare ed eseguire un benchmark."""
@@ -344,7 +345,7 @@ class BenchmarkOptions(VerticalScroll):
         except Exception:
             preset_name = "local"
         try:
-            with open("presets.json", "r") as f:
+            with open(presets_path(), "r") as f:
                 presets = json.load(f)
         except Exception:
             return ""
