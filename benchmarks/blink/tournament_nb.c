@@ -1,4 +1,5 @@
 #include "common.h"
+#include "results.h"
 #include <math.h>
 #include <mpi.h>
 #include <sched.h>
@@ -23,9 +24,11 @@
 #define TAG_ACK 101      /* receiver -> sender window ack */
 #define TAG_DATA_BWD 102 /* receiver -> sender payload */
 
-/*partner rank for each recorded sample, parallel to durations[] (same index,
-  same LRU wrap). Lets the per-node dump report who each exchange was with.*/
+/*partner rank and tournament round for each recorded sample, parallel to
+  durations[] (same index, same LRU wrap). Lets the per-node dump report who
+  each exchange was with and in which round.*/
 static int *sample_partners = NULL;
+static int *sample_phase = NULL;
 
 /*wait for all requests to complete, bailing out after timeout_seconds*/
 static int check_with_timeout(int count, int timeout_seconds,
@@ -114,123 +117,6 @@ static void rotate_arr(int *arr, int n) {
     arr[i] = arr[i - 1];
   }
   arr[1] = tmp;
-}
-
-/*Each rank writes its own measured samples to a per-node/per-rank file.
-  Mirrors write_results()'s reconstruction of the LRU-wrapped durations ring
-  buffer (and the parallel sample_partners[] ring), and resolves each sample's
-  partner rank to its hostname via an MPI_Allgather of processor names. The file
-  is tagged with the node's hostname and the rank, so co-located ranks don't
-  clobber it.
-
-  Collective: every rank calls this after the same MPI_Barrier, so the
-  MPI_Allgather below is safe.*/
-static void write_node_results(void) {
-  int num_samples;
-  int start_index;
-  int i;
-  double *tmp_buf = NULL;
-  int *tmp_partner = NULL;
-
-  /*reconstruct the ordered sample window exactly like write_results(),
-    keeping durations and their partner ranks index-aligned*/
-  if (curr_iters > max_samples) { /*the ring buffer wrapped*/
-    num_samples = max_samples;
-    start_index = curr_iters % max_samples;
-    tmp_buf = (double *)malloc(sizeof(double) * num_samples);
-    tmp_partner = (int *)malloc(sizeof(int) * num_samples);
-    if (tmp_buf == NULL || tmp_partner == NULL) {
-      fprintf(stderr, "Failed to allocate a buffer on rank %d\n", my_rank);
-      exit(-1);
-    }
-    memcpy(tmp_buf, &(durations[start_index]),
-           sizeof(double) * (num_samples - start_index));
-    memcpy(&tmp_buf[num_samples - start_index], durations,
-           sizeof(double) * start_index);
-    memcpy(tmp_partner, &(sample_partners[start_index]),
-           sizeof(int) * (num_samples - start_index));
-    memcpy(&tmp_partner[num_samples - start_index], sample_partners,
-           sizeof(int) * start_index);
-  } else {
-    num_samples = curr_iters - warm_up_iters;
-    start_index = warm_up_iters;
-    tmp_buf = (double *)malloc(sizeof(double) * num_samples);
-    tmp_partner = (int *)malloc(sizeof(int) * num_samples);
-    if (tmp_buf == NULL || tmp_partner == NULL) {
-      fprintf(stderr, "Failed to allocate a buffer on rank %d\n", my_rank);
-      exit(-1);
-    }
-    memcpy(tmp_buf, &(durations[start_index]), sizeof(double) * num_samples);
-    memcpy(tmp_partner, &(sample_partners[start_index]),
-           sizeof(int) * num_samples);
-  }
-
-  /*identify the node this rank runs on (zero-pad: the whole field is
-   * gathered)*/
-  char proc_name[MPI_MAX_PROCESSOR_NAME];
-  int name_len = 0;
-  memset(proc_name, 0, sizeof(proc_name));
-  if (MPI_Get_processor_name(proc_name, &name_len) != MPI_SUCCESS) {
-    snprintf(proc_name, sizeof(proc_name), "unknown");
-  }
-
-  /*gather every rank's hostname so a peer rank can be mapped to its node*/
-  char *all_names = (char *)malloc((size_t)w_size * MPI_MAX_PROCESSOR_NAME);
-  if (all_names == NULL) {
-    fprintf(stderr, "Failed to allocate a buffer on rank %d\n", my_rank);
-    exit(-1);
-  }
-  MPI_Allgather(proc_name, MPI_MAX_PROCESSOR_NAME, MPI_CHAR, all_names,
-                MPI_MAX_PROCESSOR_NAME, MPI_CHAR, MPI_COMM_WORLD);
-
-  /*write into the experiment data dir exported by CINETIC; accept the legacy
-    CRAB_ name for backward compatibility; fall back to CWD*/
-  const char *out_dir = getenv("CINETIC_NODE_RESULTS_DIR");
-  if (out_dir == NULL || out_dir[0] == '\0') {
-    out_dir = getenv("CRAB_NODE_RESULTS_DIR");
-  }
-  if (out_dir == NULL || out_dir[0] == '\0') {
-    out_dir = ".";
-  }
-
-  /*one file per rank, tagged with the node name to make it node-related*/
-  char filename[4096];
-  snprintf(filename, sizeof(filename), "%s/node_%s_rank%d.csv", out_dir,
-           proc_name, my_rank);
-
-  FILE *f = fopen(filename, "w");
-  if (f == NULL) {
-    fprintf(stderr, "Rank %d could not open %s for writing\n", my_rank,
-            filename);
-    free(all_names);
-    free(tmp_partner);
-    free(tmp_buf);
-    return;
-  }
-
-  fprintf(f, "node,rank,peer_node,peer_rank,sample,duration_s\n");
-  int prev_peer = -1;
-  for (i = 0; i < num_samples; i++) {
-    int peer = tmp_partner[i];
-    /*samples are chronological, so a peer change marks a new tournament
-      round (a new "run" against a different partner): fence the blocks
-      with a line of '=' so downstream processing can split on them*/
-    if (i > 0 && peer != prev_peer) {
-      fprintf(f, "========================================\n");
-    }
-    const char *peer_name =
-        (peer >= 0 && peer < w_size)
-            ? &all_names[(size_t)peer * MPI_MAX_PROCESSOR_NAME]
-            : "unknown";
-    fprintf(f, "%s,%d,%s,%d,%d,%.9f\n", proc_name, my_rank, peer_name, peer, i,
-            tmp_buf[i]);
-    prev_peer = peer;
-  }
-  fclose(f);
-
-  free(all_names);
-  free(tmp_partner);
-  free(tmp_buf);
 }
 
 int main(int argc, char **argv) {
@@ -383,9 +269,12 @@ int main(int argc, char **argv) {
   durations = (double *)malloc_align(sizeof(double) * max_samples);
   sample_partners =
       (int *)malloc_align(sizeof(int) * max_samples); /*peer rank per sample*/
+  sample_phase =
+      (int *)malloc_align(sizeof(int) * max_samples); /*round per sample*/
 
   if (send_buf == NULL || recv_buf == NULL || arr == NULL || partner == NULL ||
-      reqs == NULL || durations == NULL || sample_partners == NULL) {
+      reqs == NULL || durations == NULL || sample_partners == NULL ||
+      sample_phase == NULL) {
     fprintf(stderr, "Failed to allocate a buffer on rank %d\n", my_rank);
     exit(-1);
   }
@@ -459,6 +348,8 @@ int main(int argc, char **argv) {
               measure_start_time; /*write result to buffer (lru space)*/
           sample_partners[curr_iters % max_samples] =
               partner_rank; /*who this sample was exchanged with*/
+          sample_phase[curr_iters % max_samples] =
+              round; /*which tournament round this sample belongs to*/
           curr_iters++;
           if (burst_length != 0) { /*bcast needed for synch if bursts timed*/
             if (my_rank ==
@@ -482,8 +373,15 @@ int main(int argc, char **argv) {
 
   /*write results to file*/
   MPI_Barrier(MPI_COMM_WORLD);
-  write_node_results(); /*each rank dumps its own samples to a node-related
-                           file*/
+  /*each rank dumps its own samples in the standardized per-node format. One
+    sample = measure_granularity windowed full-duplex exchanges, so the
+    bandwidth basis is 2*window*msg_size*granularity (both directions) and the
+    latency basis is window*granularity iterations.*/
+  cin_write_node_results(
+      "pairwise_fd", 0, MPI_COMM_WORLD, durations, sample_partners, sample_phase,
+      2.0 * window * msg_size * measure_granularity,
+      (double)window * measure_granularity, curr_iters, max_samples,
+      warm_up_iters);
   write_results();
 
   /*report window timeouts across all ranks (stderr: stdout is parsed as CSV)*/
@@ -496,6 +394,7 @@ int main(int argc, char **argv) {
   }
 
   /*free allocated buffers*/
+  free(sample_phase);
   free(sample_partners);
   free(durations);
   free(reqs);

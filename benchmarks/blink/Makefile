@@ -19,11 +19,11 @@ CXXFLAGS = -lm -D_GNU_SOURCE -O3 -std=c++17
 all: $(BINS)
 
 # Rule for .c → executable
-$(BIN_DIR)/%: $(SRC_DIR)/%.c $(SRC_DIR)/common.h
+$(BIN_DIR)/%: $(SRC_DIR)/%.c $(SRC_DIR)/common.h $(SRC_DIR)/results.h
 	mpicc -o $@ $< $(CFLAGS)
 
 # Rule for .cpp → executable
-$(BIN_DIR)/%: $(SRC_DIR)/%.cpp $(SRC_DIR)/common.h
+$(BIN_DIR)/%: $(SRC_DIR)/%.cpp $(SRC_DIR)/common.h $(SRC_DIR)/results.h
 	mpicxx -o $@ $< $(CXXFLAGS)
 
 clean:
