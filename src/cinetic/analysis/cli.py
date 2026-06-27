@@ -17,7 +17,7 @@ import json
 import os
 import sys
 
-from cinetic.analysis import metrics, outliers as outl, params as prm, parse, topo
+from cinetic.analysis import context, metrics, outliers as outl, params as prm, parse, topo
 from cinetic.analysis import report_plot, report_text
 
 
@@ -46,17 +46,18 @@ def analyze_exp_dir(exp_dir: str, args) -> int:
     to ``analysis/app_<id>/`` so they don't overwrite each other."""
     app_ids = parse.app_ids_in_dir(exp_dir)
     multi = len(app_ids) > 1
+    ctx = context.load_context(exp_dir)   # roles/system (degrades if no config)
     rc = 1
     for app_id in app_ids:
         sub = None
         if multi:
             sub = f"app_{app_id}" if app_id is not None else "app_legacy"
-        if _analyze_one(exp_dir, app_id, sub, args) == 0:
+        if _analyze_one(exp_dir, app_id, sub, args, ctx) == 0:
             rc = 0
     return rc
 
 
-def _analyze_one(exp_dir: str, app_id, subdir, args) -> int:
+def _analyze_one(exp_dir: str, app_id, subdir, args, ctx=None) -> int:
     ds = parse.parse_exp_dir(exp_dir, app_id=app_id)
     if not ds.matches:
         if app_id is not None:
@@ -79,10 +80,18 @@ def _analyze_one(exp_dir: str, app_id, subdir, args) -> int:
     resolver = topo.TopoResolver(topology=topology)
 
     an = metrics.analyze(ds, params, resolver)
+    # annotate with role/system from the experiment context (no-op if no config)
+    app = ctx.app(app_id) if ctx is not None else None
+    if app is not None:
+        an.app_id = app.app_id
+        an.role = app.role.value
+        an.output_kind = app.output_kind
+    elif app_id is not None:
+        an.app_id = str(app_id)
     ol = outl.detect(an.node_bw_median, k=args.slow_k, frac=args.slow_frac,
                      min_nodes=args.min_nodes)
 
-    report = report_text.format_report(an, ol, topo_path)
+    report = report_text.format_report(an, ol, topo_path, context=ctx)
     if subdir:
         print(f"\n################ {subdir} ################")
     print(report)
@@ -107,7 +116,7 @@ def _analyze_one(exp_dir: str, app_id, subdir, args) -> int:
         fh.write(per_round_per_node + "\n")
     if args.json:
         with open(os.path.join(outdir, "summary.json"), "w") as fh:
-            json.dump(report_text.build_summary(an, ol), fh, indent=2)
+            json.dump(report_text.build_summary(an, ol, context=ctx), fh, indent=2)
 
     if not args.no_plots:
         try:

@@ -161,6 +161,11 @@ class Analysis:
     lat_by_label: Dict[str, np.ndarray] = field(default_factory=dict)
     # comm id -> span label (collective only)
     comm_span: Dict[int, str] = field(default_factory=dict)
+    # semantic annotations from context.py (None when no config.json): which app
+    # produced this, its role (victim/aggressor/timed), and its output kind.
+    app_id: Optional[str] = None
+    role: Optional[str] = None
+    output_kind: Optional[str] = None
 
 
 def build_pairings(ds: Dataset, params: Params,

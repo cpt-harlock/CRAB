@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Optional
+from typing import Any, Dict, Optional
 
 from .metrics import Analysis, Stat
 from .outliers import OutlierResult
@@ -32,8 +32,26 @@ def _lat_line(s: Stat) -> str:
             f"p95 {_us(s.p95)}  min {_us(s.vmin)}  max {_us(s.vmax)}")
 
 
+def _role_lines(an: Analysis, context=None) -> list:
+    """Role/congestion context header (empty when no config.json was found)."""
+    L = []
+    if an.app_id is not None or an.role is not None:
+        who = f"app {an.app_id}" if an.app_id is not None else "app ?"
+        role = an.role or "unknown"
+        kindp = f"  [{an.output_kind}]" if an.output_kind else ""
+        L.append(f"app / role     : {who} = {role}{kindp}")
+    if context is not None and context.has_roles:
+        vics = ",".join(a.app_id for a in context.victims) or "-"
+        aggs = ",".join(a.app_id for a in context.aggressors) or "-"
+        state = "LOADED (victims + aggressors)" if context.is_loaded \
+            else "BASELINE (victims only)" if context.is_baseline \
+            else "mixed"
+        L.append(f"experiment     : {state}; victims [{vics}] aggressors [{aggs}]")
+    return L
+
+
 def format_report(an: Analysis, outliers: OutlierResult,
-                  topology_path: Optional[str]) -> str:
+                  topology_path: Optional[str], context=None) -> str:
     p = an.params
     collective = an.kind == "collective"
     directed = an.kind == "directed"
@@ -58,6 +76,7 @@ def format_report(an: Analysis, outliers: OutlierResult,
                  f"granularity={p.granularity}  [source: {p.source}]")
         L.append(f"bytes/sample   : {p.bytes_per_sample} (params fallback)")
     L.append(f"topology       : {topology_path or '(none — locality skipped)'}")
+    L.extend(_role_lines(an, context))
     L.append("")
     if collective:
         L.append("NOTE: bandwidth is per-rank bus-bandwidth (busbw), decimal GB/s, "
@@ -212,11 +231,22 @@ def _stat_dict(s: Stat) -> dict:
             "min": s.vmin, "max": s.vmax, "p95": s.p95}
 
 
-def build_summary(an: Analysis, outliers: OutlierResult) -> dict:
+def build_summary(an: Analysis, outliers: OutlierResult, context=None) -> dict:
     p = an.params
+    role_block: Dict[str, Any] = {"app_id": an.app_id, "role": an.role,
+                                  "output_kind": an.output_kind}
+    if context is not None and context.has_roles:
+        role_block["experiment"] = {
+            "state": ("loaded" if context.is_loaded
+                      else "baseline" if context.is_baseline else "mixed"),
+            "system": context.system,
+            "victims": [a.app_id for a in context.victims],
+            "aggressors": [a.app_id for a in context.aggressors],
+        }
     return {
         "exp_dir": an.dataset.exp_dir,
         "kind": an.kind,
+        "role": role_block,
         "ops": sorted({m.op for m in an.dataset.matches}),
         "comm_span": an.comm_span,
         "n_nodes": len(an.dataset.nodes),
