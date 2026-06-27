@@ -283,9 +283,27 @@ def _node_stats(node: str, matches: List[Match], params: Params,
                      profile=_classify_peer_profile(match_stats))
 
 
+def _reciprocity(ds: Dataset) -> float:
+    """Fraction of non-collective matches whose peer reciprocates at the same
+    round. ~1 for symmetric pairings (tournament); ~0 for a directed pattern
+    (a ring, where peer = successor, never points back)."""
+    nonc = [m for m in ds.matches if not m.is_collective]
+    if not nonc:
+        return 1.0
+    by_key = {(m.round_index, m.rank): m for m in nonc}
+    recip = sum(1 for m in nonc
+                if (by_key.get((m.round_index, m.peer_rank)) is not None
+                    and by_key[(m.round_index, m.peer_rank)].peer_rank == m.rank))
+    return recip / len(nonc)
+
+
 def analyze(ds: Dataset, params: Params, resolver: TopoResolver) -> Analysis:
     resolver.check_coverage(ds.nodes)
     collective = ds.is_collective
+    # A non-collective dataset whose peers don't reciprocate is a *directed*
+    # pattern (e.g. ring): real per-peer locality, but no symmetric merge.
+    directed = (not collective) and _reciprocity(ds) < 0.5
+    per_match = collective or directed
 
     # Per-sample label: pairwise -> locality of (node, peer); collective -> the
     # communicator's span class (from the manifest). Computed once per comm.
@@ -307,10 +325,10 @@ def analyze(ds: Dataset, params: Params, resolver: TopoResolver) -> Analysis:
     bw_by_label: Dict[str, list] = {}
     lat_by_label: Dict[str, list] = {}
 
-    if collective:
-        # No pairs: each node's per-sample bandwidth/latency, bucketed by the
-        # communicator's span. (One value per node-sample; no merge/double-count
-        # question since there are no peer pairs.)
+    if per_match:
+        # No symmetric merge: bucket each node's per-sample bandwidth/latency by
+        # its label — comm span (collective) or the directed peer's locality
+        # (e.g. each ring hop). One value per node-sample.
         for m in ds.matches:
             lab = label_fn(m)
             bw_by_label.setdefault(lab, []).extend(match_bw(m, params).tolist())
@@ -353,6 +371,7 @@ def analyze(ds: Dataset, params: Params, resolver: TopoResolver) -> Analysis:
                     nodes=nodes, rounds=rounds, overall_bw=overall_bw,
                     overall_lat=overall_lat, by_locality=by_locality,
                     node_bw_median=node_bw_median, warnings=warnings,
-                    kind="collective" if collective else "pairwise",
+                    kind=("collective" if collective
+                          else "directed" if directed else "pairwise"),
                     bw_by_label=bw_by_label, lat_by_label=lat_by_label,
                     comm_span=span)

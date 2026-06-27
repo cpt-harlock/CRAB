@@ -9,6 +9,7 @@
 #include <stdbool.h>
 #include <sched.h>
 #include "common.h"
+#include "results.h"
 
 
 static inline int copy_buffer_different_dt (const void *input_buffer, size_t scount,
@@ -196,11 +197,18 @@ int main(int argc, char** argv){
     send_buf=(int*)malloc_align(send_buf_size);
     recv_buf=(int*)malloc_align(recv_buf_size);
     durations=(double *)malloc_align(sizeof(double)*max_samples);
-    
-    if(send_buf==NULL || recv_buf==NULL || durations==NULL){
+    int *sample_peer=(int*)malloc_align(sizeof(int)*max_samples); /*ring successor*/
+
+    if(send_buf==NULL || recv_buf==NULL || durations==NULL || sample_peer==NULL){
         fprintf(stderr,"Failed to allocate a buffer on rank %d\n",my_rank);
         exit(-1);
     }
+
+    /*the ring's communication partner is the same every step: rank sends to its
+      successor and receives from its predecessor. Attribute each sample to the
+      (rank -> successor) link so the analyzer can classify each ring hop's
+      topology distance (Tier-3 per-peer; directed, not a symmetric pairing).*/
+    int ring_successor=(my_rank+1)%w_size;
     
     /*fill send buffer with dummies*/
     for(i=0;i<msg_size_ints;i++){
@@ -245,6 +253,7 @@ int main(int argc, char** argv){
                     measure_total_time+=MPI_Wtime()-measure_start_time;
                 }
                 durations[curr_iters%max_samples]=measure_total_time; /*write result to buffer (lru space)*/
+                sample_peer[curr_iters%max_samples]=ring_successor;
                 curr_iters++;
                 if(burst_length!=0){ /*bcast needed for synch if bursts timed*/
                     if(my_rank==master_rank){ /*master decides if burst should be continued*/
@@ -264,9 +273,22 @@ int main(int argc, char** argv){
 
     /*write results to file*/
     MPI_Barrier(MPI_COMM_WORLD);
-    write_results();
-    
+    /*standardized per-node dump (Tier-3 directed per-peer). One sample =
+      measure_granularity ring allgathers; over each allgather this rank pushes
+      (w_size-1) chunks of send_buf_size bytes to its successor, so the link
+      bandwidth basis is gran*(w_size-1)*send_buf_size and the latency basis
+      (sendrecv steps) is gran*(w_size-1).*/
+    {
+        double steps = (double)measure_granularity * (double)(w_size - 1);
+        cin_write_node_results(
+            "allgather_ring", 0, MPI_COMM_WORLD, durations, sample_peer, NULL,
+            steps * (double)send_buf_size, steps, curr_iters, max_samples,
+            warm_up_iters);
+    }
+    cin_write_manifest(0);
+
     /*free allocated buffers*/
+    free(sample_peer);
     free(durations);
     free(recv_buf);
     free(send_buf);

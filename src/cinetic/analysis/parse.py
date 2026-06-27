@@ -221,15 +221,18 @@ def parse_exp_dir(exp_dir: str) -> Dataset:
     ds.n_rounds = max(block_counts) if block_counts else 0
     ds.comms = parse_manifest(exp_dir)
 
-    # The ring-buffer-wrap heuristics below count tournament rounds; they don't
-    # apply to collectives (one block per node = the whole-comm operation).
-    if not ds.is_collective:
-        if len(set(block_counts)) > 1:
-            ds.warnings.append(
-                f"node files disagree on round count {sorted(set(block_counts))}; "
-                "ring-buffer wrap or a truncated run is likely")
-            ds.wrapped = True
+    # Block-count disagreement is a generic wrap/truncation signal for any
+    # per-node format with >1 block per file (i.e. not collectives).
+    if not ds.is_collective and len(set(block_counts)) > 1:
+        ds.warnings.append(
+            f"node files disagree on block count {sorted(set(block_counts))}; "
+            "ring-buffer wrap or a truncated run is likely")
+        ds.wrapped = True
 
+    # The "rounds == ranks-1" expectation is specific to the all-pairs tournament
+    # (op=pairwise_fd); it doesn't hold for collectives or directed patterns
+    # (a ring has one block per node), so only apply it there.
+    if {m.op for m in ds.matches} == {"pairwise_fd"}:
         n_ranks = len(ds.rank_to_node)
         if n_ranks and ds.n_rounds and ds.n_rounds < n_ranks - 1:
             ds.warnings.append(

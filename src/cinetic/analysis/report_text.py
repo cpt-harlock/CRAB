@@ -36,6 +36,7 @@ def format_report(an: Analysis, outliers: OutlierResult,
                   topology_path: Optional[str]) -> str:
     p = an.params
     collective = an.kind == "collective"
+    directed = an.kind == "directed"
     ops = sorted({m.op for m in an.dataset.matches}) or ["?"]
     L = []
     L.append("=" * 78)
@@ -47,6 +48,9 @@ def format_report(an: Analysis, outliers: OutlierResult,
         L.append(f"nodes / samples: {len(an.dataset.nodes)} nodes, "
                  f"{len(an.dataset.matches)} per-node series, "
                  f"{len(an.comm_span)} communicator(s)")
+    elif directed:
+        L.append(f"nodes / series : {len(an.dataset.nodes)} nodes, "
+                 f"{len(an.dataset.matches)} per-node series (directed per-peer)")
     else:
         L.append(f"nodes / rounds : {len(an.dataset.nodes)} nodes, "
                  f"{an.dataset.n_rounds} rounds, {len(an.pairings)} pairings")
@@ -60,6 +64,11 @@ def format_report(an: Analysis, outliers: OutlierResult,
                  "from the benchmark's `bytes` basis.")
         L.append("      latency = per-op completion time (gated by the slowest "
                  "rank in the collective).")
+    elif directed:
+        L.append("NOTE: directed per-peer pattern (e.g. a ring): each row's peer "
+                 "is the pattern's neighbor, so bandwidth is per-link and "
+                 "locality is that hop's distance.")
+        L.append("      latency = per-step time; no symmetric merge is applied.")
     else:
         L.append("NOTE: bandwidth is full-duplex aggregate, decimal GB/s "
                  "(unidirectional = half).")
@@ -100,7 +109,7 @@ def format_report(an: Analysis, outliers: OutlierResult,
                  "collective over")
         L.append("        sub-comms of differing span to populate the span axis.")
         L.append("")
-    else:
+    elif an.rounds:
         L.append("-- PER ROUND " + "-" * 65)
         L.append(f"  {'rnd':>3} {'pairs':>5} {'sw':>3} {'cell':>4} {'cross':>5} "
                  f"{'unk':>3}  {'med BW':>8}  {'med lat(us)':>11}")
@@ -124,7 +133,7 @@ def format_report(an: Analysis, outliers: OutlierResult,
                  f"{ns.bw.n:>5}{mark}")
     L.append("")
 
-    if not collective:
+    if an.kind == "pairwise":
         L.append("-- PER-NODE PEER PROFILE (summary) " + "-" * 43)
         L.append("  how each node's bandwidth splits across its peers:")
         for ns in sorted(an.nodes, key=lambda x: x.median_bw_gbs):
