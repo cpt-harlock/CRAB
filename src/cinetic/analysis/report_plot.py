@@ -655,3 +655,40 @@ def plot_congestion(cr, out_path: str) -> str:
     fig.savefig(out_path, dpi=120)
     plt.close(fig)
     return out_path
+
+
+def plot_fabric(fl, out_path: str, top_n: int = 15) -> str:
+    """Top-N congested switches as a horizontal bar chart, colored by role.
+
+    *fl* is a :class:`cinetic.analysis.fabric.FabricLoad`. Self-contained
+    matplotlib import so it can be called independently of generate_plots()."""
+    import matplotlib
+    if matplotlib.get_backend().lower() != "agg":
+        matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    top = fl.switches[:top_n]
+    if not top:
+        return ""
+    labels = [f"{s.ib_name[-8:]} ({s.cell})" for s in top]
+    loads = [s.load for s in top]
+    role_color = {"leaf": "#2ca02c", "spine": "#1f77b4", "unknown": "#7f7f7f"}
+    colors = [role_color.get(s.role, "#7f7f7f") for s in top]
+
+    y = np.arange(len(top))
+    fig, ax = plt.subplots(figsize=(8, max(3, len(top) * 0.4)))
+    ax.barh(y, loads, color=colors)
+    ax.set_yticks(y)
+    ax.set_yticklabels(labels, fontsize=8)
+    ax.invert_yaxis()                         # heaviest at top
+    ax.set_xlabel("expected load (GB/s, ECMP candidate exposure)")
+    ax.set_title(f"Fabric hotspots — top {len(top)} switches by load")
+    from matplotlib.patches import Patch
+    seen = {s.role for s in top}
+    ax.legend(handles=[Patch(color=role_color.get(r, "#7f7f7f"), label=r)
+                       for r in sorted(seen)], fontsize=8)
+    ax.grid(True, axis="x", alpha=0.3)
+    fig.tight_layout()
+    fig.savefig(out_path, dpi=120)
+    plt.close(fig)
+    return out_path

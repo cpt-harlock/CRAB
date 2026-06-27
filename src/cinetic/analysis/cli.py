@@ -17,7 +17,7 @@ import json
 import os
 import sys
 
-from cinetic.analysis import congestion, context, metrics, outliers as outl, params as prm, parse, topo
+from cinetic.analysis import congestion, context, fabric, metrics, outliers as outl, params as prm, parse, topo
 from cinetic.analysis import report_plot, report_text
 
 
@@ -48,12 +48,25 @@ def analyze_exp_dir(exp_dir: str, args) -> int:
     multi = len(app_ids) > 1
     ctx = context.load_context(exp_dir)   # roles/system (degrades if no config)
     rc = 1
+    built_all = []                        # kept for the fabric pass (goal 4)
     for app_id in app_ids:
         sub = None
         if multi:
             sub = f"app_{app_id}" if app_id is not None else "app_legacy"
-        if _analyze_one(exp_dir, app_id, sub, args, ctx) == 0:
-            rc = 0
+        built = _build_analysis(exp_dir, app_id, args, ctx)
+        if built is None:
+            if app_id is not None:
+                print(f"[skip] {exp_dir} (app {app_id}): no parseable node files",
+                      file=sys.stderr)
+            continue
+        _report_analysis(exp_dir, sub, args, ctx, built)
+        built_all.append(built)
+        rc = 0
+
+    # fabric load attribution (goal 4): combines ALL collecting apps of this
+    # experiment, since they shared the fabric concurrently.
+    if getattr(args, "fabric", False) and built_all:
+        _run_fabric(exp_dir, args, built_all)
     return rc
 
 
@@ -93,13 +106,8 @@ def _build_analysis(exp_dir: str, app_id, args, ctx=None):
     return an, ol, topo_path
 
 
-def _analyze_one(exp_dir: str, app_id, subdir, args, ctx=None) -> int:
-    built = _build_analysis(exp_dir, app_id, args, ctx)
-    if built is None:
-        if app_id is not None:
-            print(f"[skip] {exp_dir} (app {app_id}): no parseable node files",
-                  file=sys.stderr)
-        return 1
+def _report_analysis(exp_dir: str, subdir, args, ctx, built) -> None:
+    """Write/print the per-app report set for an already-built analysis."""
     an, ol, topo_path = built
 
     report = report_text.format_report(an, ol, topo_path, context=ctx)
@@ -138,7 +146,36 @@ def _analyze_one(exp_dir: str, app_id, subdir, args, ctx=None) -> int:
         except Exception as exc:  # noqa: BLE001
             print(f"[warn] plotting failed: {exc}", file=sys.stderr)
 
-    return 0
+
+def _run_fabric(exp_dir: str, args, built_all) -> None:
+    """Attribute switch/link load across all of an experiment's apps (goal 4)."""
+    topo_path = args.topology or _default_topology(os.path.dirname(exp_dir))
+    topology = topo.load_topology(topo_path) if topo_path else None
+    if topology is None:
+        print("[fabric] no topology — skipping link attribution", file=sys.stderr)
+        return
+    analyses = [b[0] for b in built_all]
+    fl = fabric.attribute(analyses, topology)
+    if fl is None:
+        print("[fabric] <80% of hosts resolve in the topology — skipping "
+              "(wrong topology file?)", file=sys.stderr)
+        return
+    text = fabric.format_fabric(fl, top_n=args.hotspots)
+    print("\n" + text)
+    outdir = args.outdir or os.path.join(exp_dir, "analysis")
+    os.makedirs(outdir, exist_ok=True)
+    with open(os.path.join(outdir, "fabric.txt"), "w") as fh:
+        fh.write(text + "\n")
+    if args.json:
+        with open(os.path.join(outdir, "fabric.json"), "w") as fh:
+            json.dump(fabric.build_fabric_summary(fl), fh, indent=2)
+    if not args.no_plots:
+        try:
+            report_plot.plot_fabric(fl, os.path.join(outdir, "fabric_load.png"),
+                                    top_n=args.hotspots)
+        except Exception as exc:  # noqa: BLE001
+            print(f"[warn] fabric plot failed: {exc}", file=sys.stderr)
+    print(f"[fabric] wrote attribution to {outdir}", file=sys.stderr)
 
 
 def _parse_app_id(exp_dir: str, app):
@@ -262,6 +299,10 @@ def main(argv=None) -> int:
                          "(default: auto-detect a victim-only experiment)")
     ap.add_argument("--no-congestion", action="store_true",
                     help="skip the victim-vs-baseline congestion comparison")
+    ap.add_argument("--fabric", action="store_true",
+                    help="attribute per-switch/per-link load (needs --topology)")
+    ap.add_argument("--hotspots", type=int, default=15,
+                    help="top-N congested links/switches to report (default 15)")
     args = ap.parse_args(argv)
 
     exp_dirs = _find_exp_dirs(args.path)

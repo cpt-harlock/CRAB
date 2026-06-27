@@ -131,7 +131,7 @@ src/cinetic/analysis/
   context.py          ✔ ExperimentContext: config.json/environment.json -> apps+roles+output_kind
   congestion.py       ✔ victim/aggressor impact (baseline-vs-loaded, axis A) (goal 1)
   compare.py          ☐ align + delta across analyzed apps/runs (goal 2)
-  fabric.py           ☐ path estimation + per-switch/per-link load attribution (goal 4)
+  fabric.py           ✔ ECMP path candidates + per-switch/per-link load attribution (goal 4)
   generic_reader.py   ☐ OPTIONAL: data_app_<id>.csv for non-instrumented apps (goal 3 residual)
   parse.py params.py metrics.py topo.py outliers.py     ◐ reused (standardization-ready)
   report_text.py report_plot.py                          ◐ extended (roles + congestion plot)
@@ -359,9 +359,13 @@ already loops per app — congestion/fabric hang off that loop.
    single-run caveat; `congestion.txt`/`.json` + overlay plot. Auto-detects a
    victim-only baseline in the run, or `--baseline <dir>`; `--no-congestion`
    skips. (Axis B in-experiment correlation deferred to fabric, M3.)
-3. **Fabric** (`fabric.py`): hop-count + path candidate sets (pairwise, directed,
-   and manifest-expanded collective) + per-link load + hotspot table + heatmap.
-   Enables axis-B in-experiment congestion correlation.
+3. **[DONE]** **Fabric** (`fabric.py`): builds the switch graph from the
+   topology, computes ECMP shortest-path candidate sets, and attributes expected
+   per-switch/per-link load across all of an experiment's flows (pairwise,
+   directed, and manifest-expanded collective), weighted by bandwidth. Hotspot
+   tables (`fabric.txt`/`.json`) + a per-switch load bar plot; `--fabric`
+   `--hotspots N`; <80%-host-resolution guard. (Axis-B congestion correlation
+   and the N×N heatmap promotion remain follow-ups.)
 4. **Compare** (`compare.py`): cross-experiment alignment (same-kind), deltas,
    `--bw-relative`, trend; `compare` subcommand.
 5. **Generic reader** (`generic_reader.py`, *optional / as needed*): topology-blind
