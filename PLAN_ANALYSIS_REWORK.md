@@ -374,8 +374,12 @@ already loops per app — congestion/fabric hang off that loop.
 5. **Generic reader** (`generic_reader.py`, *optional / as needed*): topology-blind
    `data_app_<id>.csv` support for non-instrumentable apps. Skip if all relevant
    benchmarks can instead be wired to `results.h`.
-6. **Polish**: docs in `CLAUDE.md`, summary.json schema, end-to-end smoke test on
-   a fresh multi-experiment Leonardo run.
+6. **[DONE]** **Docs**: `CLAUDE.md` gains a "Congestion-aware analysis (roles,
+   congestion, fabric, compare)" subsection covering the new modules, flags, the
+   `compare` subcommand, and the summary.json additions. End-to-end regression
+   (clean rebuild → all 4 benchmarks → multi-app gating → roles/congestion/
+   fabric/compare) verified, 44/44 checks. (M5 generic reader remains optional /
+   as-needed.)
 
 **MVP cut:** milestones 1–2 deliver the core "how much do aggressors hurt
 victims" answer — and are now cheaper, since standardization already produces the

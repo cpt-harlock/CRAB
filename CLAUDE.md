@@ -277,6 +277,43 @@ single-app or legacy dir writes straight to `analysis/`). Designs:
 `PLAN_OUTPUT_STANDARDIZATION.md` (collective/directed standardization),
 `PLAN_ANALYSIS_REWORK.md` (analysis rework).
 
+### Congestion-aware analysis (roles, congestion, fabric, compare)
+
+On top of the per-app reports, the analyzer adds a **semantic + comparison**
+layer (`PLAN_ANALYSIS_REWORK.md`). It reads the run's `config.json` /
+`environment.json` to learn what each app *was*, then diffs and attributes:
+
+- **Roles** (`analysis/context.py`): each app id → role from its `end` field
+  (`""`=victim, `"f"`=aggressor, `"<N>"`=timed), partition, system, and detected
+  `output_kind`. The report gains an `app / role` line + a `BASELINE`/`LOADED`
+  experiment header; `summary.json` gains a `role` block. Degrades to anonymous
+  analysis when there is no config.
+- **Congestion impact** (`analysis/congestion.py`, goal 1): diffs a victim's
+  analysis between a **baseline** experiment (victims only) and a **loaded** one
+  (same victim + aggressors) → bandwidth-drop% / latency-increase% overall, per
+  topology label, and per node (worst-hit first). Auto-detects a victim-only
+  baseline in the run, or `--baseline <dir>`; `--no-congestion` skips. Writes
+  `congestion.txt`/`.json` + a baseline-vs-loaded overlay plot. Single-run
+  point estimate (final-run-only) is flagged.
+- **Fabric load** (`analysis/fabric.py`, goal 4, `--fabric`): builds the switch
+  graph from the topology and attributes each flow's bandwidth across **all
+  shortest paths** between endpoint leaf switches (exact ECMP expected load) to
+  rank hotspot **switches/links**. Flows: pairwise pairings, directed hops, and
+  manifest-expanded collective member pairs. Combines all of an experiment's
+  collecting apps (concurrent fabric load). `--hotspots N`; writes
+  `fabric.txt`/`.json` + a per-switch load bar. Skips (warns) when <80% of hosts
+  resolve. Candidate exposure, not a claimed route.
+- **Cross-experiment compare** (`analysis/compare.py`, goal 2,
+  `cinetic analyze compare <dirA> <dirB> …`): aligns N run/exp dirs by node +
+  topology label (same-kind only; mixed flagged), reports deltas vs the first
+  series, fits an overall-bandwidth **trend** (auto run-dir timestamps or
+  `--x index|timestamp|<nums>`), and supports `--bw-relative` (normalize to each
+  series' own median). Writes `comparison.txt`/`.json` + an overlay plot.
+
+These layers **consume** the per-app `Analysis` objects (they never re-parse or
+recompute bandwidth). `model.py` from the plan was folded in: role fields live on
+`metrics.Analysis`; result types live in their own modules.
+
 ## Dependencies
 
 ```
