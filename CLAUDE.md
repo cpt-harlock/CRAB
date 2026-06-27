@@ -98,6 +98,47 @@ convergence-based stopping has been removed, so each experiment runs exactly
 once (bounded by `timeout`). Legacy configs may still carry `minruns`/`maxruns`/
 `alpha`/`beta`/`convergeall`; they are ignored.
 
+### Writing a benchmark that emits standardized results
+
+A C/C++ MPI benchmark opts into the standardized per-node output (above) by
+including `benchmarks/blink/results.h` (header-only; the Makefile lists it as a
+prerequisite for every `*.c`/`*.cpp` target — do **not** add a `results.c`, the
+glob would build a stray `bin/results`). After the measured loop fills the LRU
+`durations[]` ring, call:
+
+```c
+cin_write_node_results(
+    op,              // op tag string, e.g. "pairwise_fd" / "alltoall" / "allgather_ring"
+    comm_id,         // communicator id (0 for COMM_WORLD; matches the manifest)
+    MPI_COMM_WORLD,  // comm used to resolve hostnames/ranks for the dump
+    durations,       // the LRU sample buffer
+    peer,            // int[] per-sample peer rank, or NULL for an opaque collective
+    phase,           // int[] per-sample phase/round, or NULL (-1)
+    bytes_per_sample,// bandwidth basis (busbw convention; see below)
+    ops_per_sample,  // latency basis (op completions per sample)
+    curr_iters, max_samples, warm_up_iters);
+cin_write_manifest(comm_id);   // race-free; call once after the dump
+```
+
+Three flavors, by how `peer`/`phase` are filled:
+- **pairwise** (e.g. `tournament_nb.c`): real per-sample `peer` + `phase`; the
+  analyzer merges both endpoints into symmetric pairings and classifies each by
+  topology locality.
+- **collective** (e.g. `ardc_nb.c` allreduce, `a2a_nb.c` alltoall): `peer=NULL`,
+  `phase=NULL`; no single peer, so topology is analyzed via the **comm span**
+  from the manifest. Set `bytes_per_sample` with the **busbw** convention
+  (allreduce `gran*2*(N-1)/N*msg`, alltoall `gran*2*(N-1)*msg`) and
+  `ops_per_sample=gran`. Use `-splitsize N` (`MPI_Comm_split`) to populate the
+  collective locality axis with sub-communicators of differing span.
+- **directed** (e.g. `agtr_comm_only.cpp` ring allgather): real per-sample `peer`
+  (e.g. the ring successor) but non-reciprocal; the analyzer detects this
+  (reciprocity `< 0.5`), keeps each directed hop separate (no merge), and reports
+  per-link bandwidth with real per-hop locality.
+
+Size `max_samples` so the ring buffer doesn't evict measured rounds:
+`rounds*iters` for pairwise, `iters` for collectives. Design & milestones:
+`PLAN_OUTPUT_STANDARDIZATION.md`.
+
 ## Topology (network-aware node selection)
 
 `src/cinetic/topology/` parses `ibnetdiscover` output into a neutral, serializable
@@ -172,32 +213,56 @@ Results land under `data/<CINETIC_SYSTEM>/<name>_<timestamp>/`:
 - `config.json`, `environment.json` — reproducibility snapshot
 - `cinetic_job.sh` — submitted Slurm script
 - `slurm_output.log`, `slurm_error.log`
-- `<exp_id>/data_app_<id>.csv` — collected metrics
+- `<exp_id>/data_app_<id>.csv` — collected metrics (wrapper-parsed stdout)
 - `<exp_id>/error_app_<id>.log` — per-app error logs on non-zero exit
 
-## Tournament result analyzer (`tournament_analyzer.py`)
+### Standardized per-node output
 
-Analyzes the **per-node CSV dumps** written by `tournament_nb.c`'s
-`write_node_results()` (`<exp_dir>/node_<host>_rank<r>.csv`, columns
-`node,rank,peer_node,peer_rank,sample,duration_s`, `=`-fenced per round).
+Benchmarks that opt in (via `results.h`, see below) also write **per-node CSV
+dumps** the analyzer reads uniformly across point-to-point *and* collective ops:
+- `<exp_id>/node_<host>_rank<r>.csv` — one file per rank, columns
+  `node,rank,op,comm,sample,phase,peer_node,peer_rank,bytes,ops,duration_s`
+  (strict superset of the legacy tournament format; parsed by header name).
+  `bytes` is the bandwidth basis (analyzer: `bandwidth = bytes/duration`),
+  `ops` the latency basis (`latency = duration/ops`); `peer_rank < 0` marks a
+  collective sample (no single peer). Only the final engine run survives (mode
+  `"w"`); a fixed-size LRU ring buffer keeps the last `max_samples` samples.
+- `<exp_id>/comm_manifest.csv` — `comm,rank,node`, mapping each communicator id
+  to its member nodes (the "peer set" for collective topology analysis). Written
+  race-free by a single WORLD-rank-0 gather.
+
+## Result analyzer (`tournament_analyzer.py` / `cinetic analyze`)
+
+Analyzes the **standardized per-node CSV dumps** (see *Standardized per-node
+output* above) — both the legacy tournament format and the unified superset.
 Backed by `src/cinetic/analysis/`: `parse` (format-tolerant: columns by name,
-blocks by peer-change) → `params` (msg_size/window/granularity from CLI →
-`stdout_app_*.log` header → `config.json` args → C defaults) → `metrics`
-(bandwidth + per-iteration latency, robust stats; pairings merge both endpoints)
-→ `topo` (wraps `cinetic.topology.model`; normalizes FQDN→short host) → `outliers`
-→ `report_text`/`report_plot`.
+blocks split on `(op,comm,peer,phase)` change; reads `comm_manifest.csv`) →
+`params` (msg_size/window/granularity from CLI → `stdout_app_*.log` header →
+`config.json` args → C defaults; per-sample `bytes`/`ops` from the file override
+these as the bandwidth/latency basis) → `metrics` (robust stats) → `topo` (wraps
+`cinetic.topology.model`; normalizes FQDN→short host; adds `comm_span`) →
+`outliers` → `report_text`/`report_plot`.
 
-Reports per-node / per-round / overall **bandwidth** (full-duplex aggregate
-decimal GB/s; unidirectional = half) and **latency** (`duration/(window*gran)`;
-a true latency only when `window==1`), plus per-round **topology distance** mix
-(same_switch / same_cell / cross_cell via `Topology.locality()`) and flagged
-under-performing nodes. A **per-node peer profile** classifies each node's
-per-peer bandwidth (uniform / bimodal / mixed / broadly_slow) and auto-detects
-the single-rail/NIC signature (a fast vs ~half-rate cluster). A
-**per-round-per-node** view lists each node's peer + distance + bandwidth/latency
-each round. Writes `report.txt`, `peer_profiles.txt`, `per_round_per_node.txt`,
-`summary.json` (`--json`), and figures to `<exp_dir>/analysis/`; `--detail` also
-echoes the per-peer / per-round tables to stdout. Design: `PLAN_RESULT_ANALYZER.md`.
+The analyzer auto-detects one of three **kinds** and adapts the report:
+- **pairwise** — symmetric merge into pairings; per-round **topology distance**
+  mix (same_switch / same_cell / cross_cell via `Topology.locality()`), per-node
+  peer profile (uniform / bimodal / mixed / broadly_slow, with single-rail/NIC
+  detection), and the per-round-per-node view.
+- **collective** (`peer_rank < 0`) — no single peer, so topology is bucketed by
+  **comm span** (worst pairwise locality among each communicator's manifest
+  members) with a "bandwidth by comm span" report/plots and a per-communicator
+  view; plus a per-node straggler view.
+- **directed** (non-reciprocal peers, reciprocity `< 0.5`, e.g. ring) — per-match
+  (no merge), reporting per-link bandwidth labelled by real per-hop locality.
+
+Reports **bandwidth** (busbw aggregate decimal GB/s; convention printed in the
+report) and **latency** (`duration/ops`), robust stats with std dev, and flagged
+under-performing nodes. Writes `report.txt`, `peer_profiles.txt` (pairwise),
+`per_round_per_node.txt`, `summary.json` (`--json`), and figures to
+`<exp_dir>/analysis/`; `--detail` echoes the per-peer / per-round tables to
+stdout. Designs: `PLAN_RESULT_ANALYZER.md` (pairwise core),
+`PLAN_OUTPUT_STANDARDIZATION.md` (collective/directed standardization),
+`PLAN_ANALYSIS_REWORK.md` (analysis rework).
 
 ## Dependencies
 
