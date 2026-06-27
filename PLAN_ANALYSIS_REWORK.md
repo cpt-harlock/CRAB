@@ -128,16 +128,20 @@ We add structure around the good core rather than disturb it.
 
 ```
 src/cinetic/analysis/
-  context.py          ☐ ExperimentContext: config.json/environment.json -> apps+roles+params
-  model.py            ☐ shared result dataclasses (AnalysisResult, CongestionResult, ...)
-  congestion.py       ☐ victim/aggressor impact within/across runs (goal 1)
+  context.py          ✔ ExperimentContext: config.json/environment.json -> apps+roles+output_kind
+  congestion.py       ✔ victim/aggressor impact (baseline-vs-loaded, axis A) (goal 1)
   compare.py          ☐ align + delta across analyzed apps/runs (goal 2)
   fabric.py           ☐ path estimation + per-switch/per-link load attribution (goal 4)
   generic_reader.py   ☐ OPTIONAL: data_app_<id>.csv for non-instrumented apps (goal 3 residual)
   parse.py params.py metrics.py topo.py outliers.py     ◐ reused (standardization-ready)
-  report_text.py report_plot.py                          ◐ extended
-  cli.py                                                 ◐ subcommands added
+  report_text.py report_plot.py                          ◐ extended (roles + congestion plot)
+  cli.py                                                 ◐ --baseline/--no-congestion added
 ```
+
+(`model.py` from the original sketch was folded in: role annotations live on the
+existing `metrics.Analysis`; `CongestionResult` lives in `congestion.py`. A
+separate shared-model module will be introduced only if `compare.py`/`fabric.py`
+need cross-module result types.)
 
 ### 3.1 ExperimentContext (`context.py`) — goal 1 foundation
 
@@ -346,14 +350,15 @@ already loops per app — congestion/fabric hang off that loop.
 
 ## 9. Milestones
 
-1. **Context layer** (`context.py`, `model.py`): parse config/environment, map
-   app ids → roles, join to the existing per-app analyses; thread an
-   `ExperimentContext` through `cli.py`; report now prints victim/aggressor roles
-   per app. *No math change.* Develop against a real run with a victim+aggressor
-   experiment (both `collect:true`).
-2. **Congestion** (`congestion.py`): baseline-vs-loaded degradation (axis A) by
-   diffing per-app analyses; single-run caveats; report section + overlay plot.
-   This is reachable right after M1 because the per-app analyses already exist.
+1. **[DONE]** **Context layer** (`context.py`): parses config/environment, maps
+   app ids → roles + output_kind, threaded through `cli.py`; report prints an
+   "app / role" line and a BASELINE/LOADED experiment header; summary.json gains
+   a role block. Degrades to anonymous analysis with no config. *No math change.*
+2. **[DONE]** **Congestion** (`congestion.py`): baseline-vs-loaded degradation
+   (axis A) by diffing per-app analyses; overall + per-label + per-node drop%,
+   single-run caveat; `congestion.txt`/`.json` + overlay plot. Auto-detects a
+   victim-only baseline in the run, or `--baseline <dir>`; `--no-congestion`
+   skips. (Axis B in-experiment correlation deferred to fabric, M3.)
 3. **Fabric** (`fabric.py`): hop-count + path candidate sets (pairwise, directed,
    and manifest-expanded collective) + per-link load + hotspot table + heatmap.
    Enables axis-B in-experiment congestion correlation.

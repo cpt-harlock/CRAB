@@ -612,3 +612,46 @@ def _plot_cdf(an: Analysis, outliers, outdir: str, plt) -> str:
     fig.savefig(out, dpi=120)
     plt.close(fig)
     return out
+
+
+def plot_congestion(cr, out_path: str) -> str:
+    """Baseline-vs-loaded victim bandwidth: grouped per-node bars + overall lines.
+
+    *cr* is a :class:`cinetic.analysis.congestion.CongestionResult`. Self-contained
+    matplotlib import so it can be called independently of generate_plots()."""
+    import matplotlib
+    if matplotlib.get_backend().lower() != "agg":
+        matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    nodes = [d.node for d in cr.per_node]
+    if not nodes:
+        return ""
+    base = np.array([d.base_bw for d in cr.per_node], dtype=float)
+    load = np.array([d.loaded_bw for d in cr.per_node], dtype=float)
+    x = np.arange(len(nodes))
+    w = 0.4
+
+    fig, ax = plt.subplots(figsize=(max(6, len(nodes) * 0.5), 4.8))
+    ax.bar(x - w / 2, base, w, label="baseline", color="#1f77b4")
+    ax.bar(x + w / 2, load, w, label="loaded (+aggressors)", color="#d62728")
+    if np.isfinite(cr.base_overall_bw):
+        ax.axhline(cr.base_overall_bw, ls="--", color="#1f77b4", lw=1,
+                   label=f"baseline overall {cr.base_overall_bw:.1f}")
+    if np.isfinite(cr.loaded_overall_bw):
+        ax.axhline(cr.loaded_overall_bw, ls="--", color="#d62728", lw=1,
+                   label=f"loaded overall {cr.loaded_overall_bw:.1f}")
+    ax.set_xticks(x)
+    ax.set_xticklabels(nodes, rotation=90, fontsize=7)
+    ax.set_ylabel("bandwidth (GB/s)")
+    drop = cr.overall_bw_drop_pct
+    drop_s = "n/a" if drop != drop else f"{drop:+.1f}%"
+    bench = f" — {cr.victim_benchmark}" if cr.victim_benchmark else ""
+    ax.set_title(f"Congestion impact{bench}: victim bandwidth "
+                 f"(overall drop {drop_s})")
+    ax.legend(fontsize=8)
+    ax.grid(True, axis="y", alpha=0.3)
+    fig.tight_layout()
+    fig.savefig(out_path, dpi=120)
+    plt.close(fig)
+    return out_path

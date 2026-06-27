@@ -17,7 +17,7 @@ import json
 import os
 import sys
 
-from cinetic.analysis import context, metrics, outliers as outl, params as prm, parse, topo
+from cinetic.analysis import congestion, context, metrics, outliers as outl, params as prm, parse, topo
 from cinetic.analysis import report_plot, report_text
 
 
@@ -57,13 +57,13 @@ def analyze_exp_dir(exp_dir: str, args) -> int:
     return rc
 
 
-def _analyze_one(exp_dir: str, app_id, subdir, args, ctx=None) -> int:
+def _build_analysis(exp_dir: str, app_id, args, ctx=None):
+    """Parse + analyze one app, annotated with role/context. Returns
+    ``(analysis, outliers, topo_path)`` or ``None`` when there are no node files.
+    Shared by the per-app report path and the congestion comparison."""
     ds = parse.parse_exp_dir(exp_dir, app_id=app_id)
     if not ds.matches:
-        if app_id is not None:
-            print(f"[skip] {exp_dir} (app {app_id}): no parseable node files",
-                  file=sys.stderr)
-        return 1
+        return None
 
     params = prm.resolve_params(exp_dir, args.msg_size, args.window,
                                 args.granularity)
@@ -90,6 +90,17 @@ def _analyze_one(exp_dir: str, app_id, subdir, args, ctx=None) -> int:
         an.app_id = str(app_id)
     ol = outl.detect(an.node_bw_median, k=args.slow_k, frac=args.slow_frac,
                      min_nodes=args.min_nodes)
+    return an, ol, topo_path
+
+
+def _analyze_one(exp_dir: str, app_id, subdir, args, ctx=None) -> int:
+    built = _build_analysis(exp_dir, app_id, args, ctx)
+    if built is None:
+        if app_id is not None:
+            print(f"[skip] {exp_dir} (app {app_id}): no parseable node files",
+                  file=sys.stderr)
+        return 1
+    an, ol, topo_path = built
 
     report = report_text.format_report(an, ol, topo_path, context=ctx)
     if subdir:
@@ -130,6 +141,98 @@ def _analyze_one(exp_dir: str, app_id, subdir, args, ctx=None) -> int:
     return 0
 
 
+def _parse_app_id(exp_dir: str, app):
+    """The app id to hand :func:`parse.parse_exp_dir`: the config id when its
+    files are app-prefixed, else ``None`` for a legacy un-prefixed dump."""
+    if glob.glob(os.path.join(exp_dir, f"node_app{app.app_id}_*.csv")):
+        return app.app_id
+    return None
+
+
+def _collect_victims(exp_dirs):
+    """[(exp_dir, ctx, AppInfo), ...] for every victim app in *exp_dirs*."""
+    out = []
+    for d in exp_dirs:
+        c = context.load_context(d)
+        for app in c.victims:
+            out.append((d, c, app))
+    return out
+
+
+def run_congestion(exp_dirs, args) -> int:
+    """Pair victim apps in LOADED experiments with a baseline of the same
+    benchmark and report degradation. Best-effort: silently does nothing when no
+    baseline+loaded pair can be found. Returns 0 if at least one pair reported."""
+    loaded = []
+    for d in exp_dirs:
+        c = context.load_context(d)
+        if c.is_loaded:
+            for app in c.victims:
+                loaded.append((d, c, app))
+    if not loaded:
+        return 1
+
+    if args.baseline:
+        base_dirs = _find_exp_dirs(args.baseline)
+        if not base_dirs:
+            print(f"[warn] --baseline {args.baseline}: no node files found",
+                  file=sys.stderr)
+            return 1
+    else:
+        base_dirs = [d for d in exp_dirs if context.load_context(d).is_baseline]
+    baseline_victims = _collect_victims(base_dirs)
+    if not baseline_victims:
+        return 1
+
+    results = []
+    for (dL, cL, appL) in loaded:
+        match = next(((dB, cB, appB) for (dB, cB, appB) in baseline_victims
+                      if appB.wrapper_name == appL.wrapper_name), None)
+        if match is None:
+            continue
+        dB, cB, appB = match
+        builtB = _build_analysis(dB, _parse_app_id(dB, appB), args, cB)
+        builtL = _build_analysis(dL, _parse_app_id(dL, appL), args, cL)
+        if builtB is None or builtL is None:
+            continue
+        cr = congestion.compute_congestion(
+            builtB[0], builtL[0],
+            baseline_label=f"{cB.exp_id} (app {appB.app_id})",
+            loaded_label=f"{cL.exp_id} (app {appL.app_id}, +aggressors)",
+            victim_benchmark=appL.wrapper_name)
+        results.append(cr)
+
+    if not results:
+        return 1
+
+    # run-level output dir (parent of the exp dirs)
+    run_dir = os.path.dirname(os.path.abspath(exp_dirs[0]))
+    outdir = args.outdir or os.path.join(run_dir, "analysis")
+    os.makedirs(outdir, exist_ok=True)
+
+    texts, summaries = [], []
+    for cr in results:
+        text = congestion.format_congestion(cr)
+        print("\n" + text)
+        texts.append(text)
+        summaries.append(congestion.build_congestion_summary(cr))
+        if not args.no_plots:
+            try:
+                report_plot.plot_congestion(
+                    cr, os.path.join(outdir, f"congestion_app{cr.victim_app}.png"))
+            except Exception as exc:  # noqa: BLE001
+                print(f"[warn] congestion plot failed: {exc}", file=sys.stderr)
+
+    with open(os.path.join(outdir, "congestion.txt"), "w") as fh:
+        fh.write("\n\n".join(texts) + "\n")
+    if args.json:
+        with open(os.path.join(outdir, "congestion.json"), "w") as fh:
+            json.dump(summaries, fh, indent=2)
+    print(f"\n[congestion] wrote {len(results)} comparison(s) to {outdir}",
+          file=sys.stderr)
+    return 0
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(
         prog="cinetic analyze", description=__doc__,
@@ -154,6 +257,11 @@ def main(argv=None) -> int:
                     help="absolute slow threshold = frac*median (default 0.7)")
     ap.add_argument("--min-nodes", type=int, default=8,
                     help="below this node count, demote z-score (default 8)")
+    ap.add_argument("--baseline",
+                    help="baseline run/exp dir for congestion comparison "
+                         "(default: auto-detect a victim-only experiment)")
+    ap.add_argument("--no-congestion", action="store_true",
+                    help="skip the victim-vs-baseline congestion comparison")
     args = ap.parse_args(argv)
 
     exp_dirs = _find_exp_dirs(args.path)
@@ -166,6 +274,11 @@ def main(argv=None) -> int:
         if len(exp_dirs) > 1:
             print(f"\n########## {d} ##########")
         rc |= analyze_exp_dir(d, args)
+
+    # congestion impact (goal 1): best-effort, only when a baseline+loaded pair
+    # exists (in-run auto-detect, or via --baseline).
+    if not args.no_congestion:
+        run_congestion(exp_dirs, args)
     return rc
 
 
