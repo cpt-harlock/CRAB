@@ -130,7 +130,7 @@ We add structure around the good core rather than disturb it.
 src/cinetic/analysis/
   context.py          ✔ ExperimentContext: config.json/environment.json -> apps+roles+output_kind
   congestion.py       ✔ victim/aggressor impact (baseline-vs-loaded, axis A) (goal 1)
-  compare.py          ☐ align + delta across analyzed apps/runs (goal 2)
+  compare.py          ✔ align + delta + trend across analyzed apps/runs (goal 2)
   fabric.py           ✔ ECMP path candidates + per-switch/per-link load attribution (goal 4)
   generic_reader.py   ☐ OPTIONAL: data_app_<id>.csv for non-instrumented apps (goal 3 residual)
   parse.py params.py metrics.py topo.py outliers.py     ◐ reused (standardization-ready)
@@ -366,8 +366,11 @@ already loops per app — congestion/fabric hang off that loop.
    tables (`fabric.txt`/`.json`) + a per-switch load bar plot; `--fabric`
    `--hotspots N`; <80%-host-resolution guard. (Axis-B congestion correlation
    and the N×N heatmap promotion remain follow-ups.)
-4. **Compare** (`compare.py`): cross-experiment alignment (same-kind), deltas,
-   `--bw-relative`, trend; `compare` subcommand.
+4. **[DONE]** **Compare** (`compare.py`): `compare` subcommand aligns N run/exp
+   dirs by node + topology label (same-kind; mixed flagged), reports overall +
+   per-label + per-node deltas vs the first series, fits an overall-bandwidth
+   trend (auto timestamp / `--x index|timestamp|<nums>`), and supports
+   `--bw-relative`. Writes `comparison.txt`/`.json` + a per-series/by-label plot.
 5. **Generic reader** (`generic_reader.py`, *optional / as needed*): topology-blind
    `data_app_<id>.csv` support for non-instrumentable apps. Skip if all relevant
    benchmarks can instead be wired to `results.h`.

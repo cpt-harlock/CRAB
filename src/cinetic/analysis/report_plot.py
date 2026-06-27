@@ -692,3 +692,59 @@ def plot_fabric(fl, out_path: str, top_n: int = 15) -> str:
     fig.savefig(out_path, dpi=120)
     plt.close(fig)
     return out_path
+
+
+def plot_comparison(cr, out_path: str) -> str:
+    """Cross-experiment comparison: overall bandwidth per series (+ trend line if
+    present) and a grouped per-topology-label bar chart.
+
+    *cr* is a :class:`cinetic.analysis.compare.ComparisonResult`."""
+    import matplotlib
+    if matplotlib.get_backend().lower() != "agg":
+        matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    labels = [s.label for s in cr.series]
+    n = len(cr.series)
+    unit = "rel" if cr.relative else "GB/s"
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(13, 5))
+
+    # left: overall bandwidth per series (line if trend/x, else bars)
+    xs = [s.x for s in cr.series]
+    if cr.trend is not None and all(x is not None for x in xs):
+        ax1.plot(xs, cr.overall_bw, "o-", color="#1f77b4", label="overall BW")
+        t = cr.trend
+        xx = np.array(sorted(t.x), dtype=float)
+        ax1.plot(xx, t.intercept + t.slope * (xx - xx.min()), "--", color="k",
+                 label=f"trend {t.slope:+.3g}/x (r={t.r:.2f})")
+        ax1.set_xlabel("x")
+        ax1.legend(fontsize=8)
+    else:
+        ax1.bar(np.arange(n), cr.overall_bw, color="#1f77b4")
+        ax1.set_xticks(np.arange(n))
+        ax1.set_xticklabels(labels, rotation=30, ha="right", fontsize=8)
+    ax1.set_ylabel("overall bandwidth (GB/s)")
+    ax1.set_title("Overall bandwidth per series")
+    ax1.grid(True, axis="y", alpha=0.3)
+
+    # right: per-topology-label grouped bars across series
+    if cr.label_rows:
+        labs = [r.key for r in cr.label_rows]
+        x = np.arange(len(labs))
+        w = 0.8 / max(1, n)
+        for i in range(n):
+            vals = [r.values[i] for r in cr.label_rows]
+            ax2.bar(x + (i - (n - 1) / 2) * w, vals, w, label=labels[i])
+        ax2.set_xticks(x)
+        ax2.set_xticklabels(labs, fontsize=8)
+        ax2.set_ylabel(f"bandwidth ({unit})")
+        ax2.set_title("By topology label")
+        ax2.legend(fontsize=7)
+        ax2.grid(True, axis="y", alpha=0.3)
+    else:
+        ax2.axis("off")
+
+    fig.tight_layout()
+    fig.savefig(out_path, dpi=120)
+    plt.close(fig)
+    return out_path

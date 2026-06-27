@@ -17,7 +17,7 @@ import json
 import os
 import sys
 
-from cinetic.analysis import congestion, context, fabric, metrics, outliers as outl, params as prm, parse, topo
+from cinetic.analysis import compare, congestion, context, fabric, metrics, outliers as outl, params as prm, parse, topo
 from cinetic.analysis import report_plot, report_text
 
 
@@ -270,7 +270,125 @@ def run_congestion(exp_dirs, args) -> int:
     return 0
 
 
+def _select_compare_analysis(d: str, args):
+    """One (Analysis, label_hint, ts) per <dir> for `compare`: prefer a victim
+    app, else the first app of the first experiment with node files."""
+    exp_dirs = _find_exp_dirs(d)
+    if not exp_dirs:
+        return None
+    chosen = None  # (exp_dir, ctx, app_or_None, app_id)
+    for ed in exp_dirs:
+        ctx = context.load_context(ed)
+        victims = ctx.victims
+        if victims:
+            app = victims[0]
+            chosen = (ed, ctx, app, _parse_app_id(ed, app))
+            break
+        if chosen is None:
+            ids = parse.app_ids_in_dir(ed)
+            app = ctx.app(ids[0]) if ids else None
+            chosen = (ed, ctx, app, ids[0] if ids else None)
+    if chosen is None:
+        return None
+    ed, ctx, app, app_id = chosen
+    built = _build_analysis(ed, app_id, args, ctx)
+    if built is None:
+        return None
+    # x ordering: parse a timestamp from the dir (or its parent) basename
+    ts = (compare.parse_timestamp(os.path.basename(os.path.abspath(d)))
+          or compare.parse_timestamp(os.path.basename(os.path.dirname(
+              os.path.abspath(ed)))))
+    return built[0], ts
+
+
+def main_compare(argv) -> int:
+    ap = argparse.ArgumentParser(
+        prog="cinetic analyze compare",
+        description="Cross-experiment comparison of N run/exp dirs.")
+    ap.add_argument("dirs", nargs="+", help="run/exp dirs to compare (>=2)")
+    ap.add_argument("--label", action="append", default=[],
+                    help="series label (repeat, in dir order)")
+    ap.add_argument("--x", help="ordering for trend: 'index', 'timestamp', or a "
+                    "comma-separated list of numbers (one per dir)")
+    ap.add_argument("--bw-relative", action="store_true", dest="bw_relative",
+                    help="normalize bandwidth to each series' own median")
+    ap.add_argument("--topology")
+    ap.add_argument("--msg-size", type=int, dest="msg_size")
+    ap.add_argument("--window", type=int)
+    ap.add_argument("--granularity", type=int)
+    ap.add_argument("--outdir", help="default: <first dir>/analysis")
+    ap.add_argument("--json", action="store_true")
+    ap.add_argument("--no-plots", action="store_true")
+    ap.add_argument("--slow-k", type=float, default=3.0)
+    ap.add_argument("--slow-frac", type=float, default=0.7)
+    ap.add_argument("--min-nodes", type=int, default=8)
+    args = ap.parse_args(argv)
+    if len(args.dirs) < 2:
+        print("error: compare needs >= 2 dirs", file=sys.stderr)
+        return 2
+
+    picked = []   # (dir, Analysis, ts)
+    for d in args.dirs:
+        sel = _select_compare_analysis(d, args)
+        if sel is None:
+            print(f"[skip] {d}: no analyzable app", file=sys.stderr)
+            continue
+        picked.append((d, sel[0], sel[1]))
+    if len(picked) < 2:
+        print("error: fewer than 2 comparable series", file=sys.stderr)
+        return 2
+
+    # x values for the trend
+    xvals = _resolve_x(args.x, [p[0] for p in picked], [p[2] for p in picked])
+    series = []
+    for i, (d, an, _ts) in enumerate(picked):
+        label = args.label[i] if i < len(args.label) \
+            else os.path.basename(os.path.abspath(d))
+        series.append(compare.series_from_analysis(
+            label, an, x=(xvals[i] if xvals else None)))
+
+    cr = compare.compare(series, relative=args.bw_relative)
+    text = compare.format_comparison(cr)
+    print(text)
+
+    outdir = args.outdir or os.path.join(os.path.abspath(args.dirs[0]), "analysis")
+    os.makedirs(outdir, exist_ok=True)
+    with open(os.path.join(outdir, "comparison.txt"), "w") as fh:
+        fh.write(text + "\n")
+    if args.json:
+        with open(os.path.join(outdir, "comparison.json"), "w") as fh:
+            json.dump(compare.build_comparison_summary(cr), fh, indent=2)
+    if not args.no_plots:
+        try:
+            report_plot.plot_comparison(cr, os.path.join(outdir, "comparison.png"))
+        except Exception as exc:  # noqa: BLE001
+            print(f"[warn] comparison plot failed: {exc}", file=sys.stderr)
+    print(f"\n[compare] wrote comparison to {outdir}", file=sys.stderr)
+    return 0
+
+
+def _resolve_x(spec, dirs, timestamps):
+    """Turn the --x spec into per-series x values, or None if unavailable."""
+    if spec == "index":
+        return list(range(len(dirs)))
+    if spec == "timestamp":
+        return timestamps if all(t is not None for t in timestamps) else None
+    if spec:
+        try:
+            xs = [float(v) for v in spec.split(",")]
+            return xs if len(xs) == len(dirs) else None
+        except ValueError:
+            return None
+    # no explicit spec: use timestamps if every dir has one (enables trend)
+    return timestamps if all(t is not None for t in timestamps) else None
+
+
 def main(argv=None) -> int:
+    if argv is None:
+        argv = sys.argv[1:]
+    if argv and argv[0] == "compare":
+        return main_compare(argv[1:])
+
     ap = argparse.ArgumentParser(
         prog="cinetic analyze", description=__doc__,
         formatter_class=argparse.RawDescriptionHelpFormatter)
