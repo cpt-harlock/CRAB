@@ -46,6 +46,29 @@ static const char *cin_results_dir(void) {
   return d;
 }
 
+/* App id within the experiment (CINETIC_APP_ID, set per app by the engine).
+   Multiple apps in one experiment share the results dir, each with its own
+   MPI_COMM_WORLD (ranks 0..n-1), so per-node filenames must be namespaced by
+   app id or co-located apps would clobber each other. Defaults to 0 (a single
+   app / a direct mpirun), which yields filenames a legacy-format analyzer still
+   globs as node_*.csv / comm_manifest_*.csv. */
+static int cin_app_id(void) {
+  const char *s = getenv("CINETIC_APP_ID");
+  if (s == NULL || s[0] == '\0')
+    return 0;
+  return atoi(s);
+}
+
+/* Whether this app should emit standardized per-node output. The engine sets
+   CINETIC_COLLECT=0 for non-collecting apps (e.g. aggressors) so they don't
+   write useless dumps; unset/non-zero => emit (preserves direct-mpirun use).
+   This is per-app (all ranks share the value), so the collective MPI calls in
+   the writers are entered or skipped uniformly — no deadlock. */
+static int cin_collect_enabled(void) {
+  const char *s = getenv("CINETIC_COLLECT");
+  return !(s != NULL && s[0] == '0' && s[1] == '\0');
+}
+
 /* Write comm_manifest.csv (comm,rank,node) for the whole job, race-free.
  *
  * Each world rank passes the id of the communicator it ran the op on
@@ -59,6 +82,8 @@ static const char *cin_results_dir(void) {
  *
  * Collective: call from every rank of MPI_COMM_WORLD after a barrier. */
 static void cin_write_manifest(int my_comm_id) {
+  if (!cin_collect_enabled())
+    return;
   int wrank, wsize;
   MPI_Comm_rank(MPI_COMM_WORLD, &wrank);
   MPI_Comm_size(MPI_COMM_WORLD, &wsize);
@@ -86,7 +111,8 @@ static void cin_write_manifest(int my_comm_id) {
   if (wrank != 0)
     return;
   char path[4096];
-  snprintf(path, sizeof(path), "%s/comm_manifest.csv", cin_results_dir());
+  snprintf(path, sizeof(path), "%s/comm_manifest_app%d.csv", cin_results_dir(),
+           cin_app_id());
   FILE *m = fopen(path, "w");
   if (m != NULL) {
     fprintf(m, "comm,rank,node\n");
@@ -134,6 +160,8 @@ static void cin_write_node_results(const char *op, int comm_id, MPI_Comm comm,
                                    const int *phase, double bytes_per_sample,
                                    double ops_per_sample, int curr_iters,
                                    int max_samples, int warm_up_iters) {
+  if (!cin_collect_enabled())
+    return;
   int rank, comm_size;
   MPI_Comm_rank(comm, &rank);
   MPI_Comm_size(comm, &comm_size);
@@ -164,8 +192,8 @@ static void cin_write_node_results(const char *op, int comm_id, MPI_Comm comm,
     num_samples = 0;
 
   char filename[4096];
-  snprintf(filename, sizeof(filename), "%s/node_%s_rank%d.csv",
-           cin_results_dir(), proc_name, rank);
+  snprintf(filename, sizeof(filename), "%s/node_app%d_%s_rank%d.csv",
+           cin_results_dir(), cin_app_id(), proc_name, rank);
   FILE *f = fopen(filename, "w");
   if (f == NULL) {
     fprintf(stderr, "Rank %d could not open %s for writing\n", rank, filename);

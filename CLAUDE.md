@@ -219,17 +219,27 @@ Results land under `data/<CINETIC_SYSTEM>/<name>_<timestamp>/`:
 ### Standardized per-node output
 
 Benchmarks that opt in (via `results.h`, see below) also write **per-node CSV
-dumps** the analyzer reads uniformly across point-to-point *and* collective ops:
-- `<exp_id>/node_<host>_rank<r>.csv` — one file per rank, columns
+dumps** the analyzer reads uniformly across point-to-point *and* collective ops.
+Files are namespaced by **app id** (`<id>` = the app's key in the experiment
+config) because every app in an experiment shares this dir but is a separate
+`mpirun`/`srun` with its own rank space — without the prefix, co-located apps
+would clobber each other:
+- `<exp_id>/node_app<id>_<host>_rank<r>.csv` — one file per rank, columns
   `node,rank,op,comm,sample,phase,peer_node,peer_rank,bytes,ops,duration_s`
   (strict superset of the legacy tournament format; parsed by header name).
   `bytes` is the bandwidth basis (analyzer: `bandwidth = bytes/duration`),
   `ops` the latency basis (`latency = duration/ops`); `peer_rank < 0` marks a
   collective sample (no single peer). Only the final engine run survives (mode
   `"w"`); a fixed-size LRU ring buffer keeps the last `max_samples` samples.
-- `<exp_id>/comm_manifest.csv` — `comm,rank,node`, mapping each communicator id
-  to its member nodes (the "peer set" for collective topology analysis). Written
-  race-free by a single WORLD-rank-0 gather.
+- `<exp_id>/comm_manifest_app<id>.csv` — `comm,rank,node`, mapping each
+  communicator id to its member nodes (the "peer set" for collective topology
+  analysis). Written race-free by a single WORLD-rank-0 gather.
+
+Only **collecting** apps (`collect: true`) emit these — the engine sets
+`CINETIC_APP_ID`/`CINETIC_COLLECT` per app (forwarded via `srun --export=ALL`
+or the mpi backend's `env VAR=…` prefix), and `results.h` skips the writers
+when `CINETIC_COLLECT=0`. Legacy un-prefixed dumps (`node_<host>_rank<r>.csv`,
+`comm_manifest.csv`) still parse as a single app.
 
 ## Result analyzer (`tournament_analyzer.py` / `cinetic analyze`)
 
@@ -260,7 +270,10 @@ report) and **latency** (`duration/ops`), robust stats with std dev, and flagged
 under-performing nodes. Writes `report.txt`, `peer_profiles.txt` (pairwise),
 `per_round_per_node.txt`, `summary.json` (`--json`), and figures to
 `<exp_dir>/analysis/`; `--detail` echoes the per-peer / per-round tables to
-stdout. Designs: `PLAN_RESULT_ANALYZER.md` (pairwise core),
+stdout. A multi-app experiment is analyzed **per app** (files grouped by the
+`app<id>_` prefix); each app gets its own `analysis/app_<id>/` subdir (a
+single-app or legacy dir writes straight to `analysis/`). Designs:
+`PLAN_RESULT_ANALYZER.md` (pairwise core),
 `PLAN_OUTPUT_STANDARDIZATION.md` (collective/directed standardization),
 `PLAN_ANALYSIS_REWORK.md` (analysis rework).
 

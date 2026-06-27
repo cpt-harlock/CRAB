@@ -24,8 +24,14 @@ from __future__ import annotations
 
 import glob
 import os
+import re
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional
+
+# Standardized per-node files are namespaced by app id when an experiment runs
+# several apps: ``node_app<id>_<host>_rank<r>.csv``. Legacy single-app dumps have
+# no ``app<id>_`` prefix (``node_<host>_rank<r>.csv``) and parse as app None.
+_APP_FILE_RE = re.compile(r"^node_app(\d+)_")
 
 
 @dataclass
@@ -65,6 +71,8 @@ class Dataset:
     warnings: List[str] = field(default_factory=list)
     # comm id -> ordered member node list (from comm_manifest.csv; {} if absent)
     comms: Dict[int, List[str]] = field(default_factory=dict)
+    # which app produced this dataset (None = legacy un-prefixed single-app dump)
+    app_id: Optional[int] = None
 
     def matches_by_node(self) -> Dict[str, List[Match]]:
         out: Dict[str, List[Match]] = {}
@@ -166,10 +174,31 @@ def parse_node_file(path: str) -> List[Match]:
     return matches
 
 
-def parse_manifest(exp_dir: str) -> Dict[int, List[str]]:
-    """Read ``comm_manifest.csv`` (comm,rank,node) -> {comm_id: [node, ...]} in
-    rank order. Returns {} if absent."""
-    path = os.path.join(exp_dir, "comm_manifest.csv")
+def app_ids_in_dir(exp_dir: str) -> List[Optional[int]]:
+    """Return the app ids present among ``node_*.csv`` in *exp_dir*.
+
+    App-namespaced files (``node_app<id>_*.csv``) contribute their integer id;
+    any legacy un-prefixed files contribute ``None``. The result is sorted with
+    ``None`` last. An empty dir returns ``[None]`` so callers still attempt the
+    legacy path (and get the standard "no files" warning)."""
+    ids: set = set()
+    legacy = False
+    for path in glob.glob(os.path.join(exp_dir, "node_*.csv")):
+        m = _APP_FILE_RE.match(os.path.basename(path))
+        if m:
+            ids.add(int(m.group(1)))
+        else:
+            legacy = True
+    out: List[Optional[int]] = sorted(ids)
+    if legacy or not out:
+        out.append(None)
+    return out
+
+
+def parse_manifest(exp_dir: str, filename: str = "comm_manifest.csv") -> Dict[int, List[str]]:
+    """Read a manifest (comm,rank,node) -> {comm_id: [node, ...]} in rank order.
+    Returns {} if absent."""
+    path = os.path.join(exp_dir, filename)
     if not os.path.isfile(path):
         return {}
     by_comm: Dict[int, Dict[int, str]] = {}
@@ -198,10 +227,21 @@ def parse_manifest(exp_dir: str) -> Dict[int, List[str]]:
             for c, members in by_comm.items()}
 
 
-def parse_exp_dir(exp_dir: str) -> Dataset:
-    """Parse every ``node_*.csv`` in *exp_dir* into a :class:`Dataset`."""
-    files = sorted(glob.glob(os.path.join(exp_dir, "node_*.csv")))
-    ds = Dataset(exp_dir=exp_dir)
+def parse_exp_dir(exp_dir: str, app_id: Optional[int] = None) -> Dataset:
+    """Parse one app's ``node_*.csv`` files in *exp_dir* into a :class:`Dataset`.
+
+    ``app_id=None`` selects the legacy un-prefixed files (``node_<host>...``) and
+    ``comm_manifest.csv``; an integer selects ``node_app<id>_*.csv`` and
+    ``comm_manifest_app<id>.csv``. Each app is analyzed independently because the
+    apps in one experiment are distinct benchmarks with their own rank spaces."""
+    if app_id is None:
+        files = sorted(p for p in glob.glob(os.path.join(exp_dir, "node_*.csv"))
+                       if not _APP_FILE_RE.match(os.path.basename(p)))
+        manifest = "comm_manifest.csv"
+    else:
+        files = sorted(glob.glob(os.path.join(exp_dir, f"node_app{app_id}_*.csv")))
+        manifest = f"comm_manifest_app{app_id}.csv"
+    ds = Dataset(exp_dir=exp_dir, app_id=app_id)
     if not files:
         ds.warnings.append(f"no node_*.csv files found in {exp_dir}")
         return ds
@@ -219,7 +259,7 @@ def parse_exp_dir(exp_dir: str) -> Dataset:
 
     ds.nodes = sorted({m.node for m in ds.matches})
     ds.n_rounds = max(block_counts) if block_counts else 0
-    ds.comms = parse_manifest(exp_dir)
+    ds.comms = parse_manifest(exp_dir, manifest)
 
     # Block-count disagreement is a generic wrap/truncation signal for any
     # per-node format with >1 block per file (i.e. not collectives).

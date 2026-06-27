@@ -36,8 +36,19 @@ class wl_manager:
         # string itself and is independent of launcher env propagation.
         out_dir = os.environ.get("CINETIC_NODE_RESULTS_DIR") \
             or os.environ.get("CRAB_NODE_RESULTS_DIR")
+        # Also forward the per-app identity (set by engine.run_job) so the
+        # standardized writer namespaces files by app id and honors the collect
+        # flag. Same `env VAR=value` prefix mechanism (independent of launcher
+        # env propagation, which proved unreliable for these under PMIx).
+        env_assigns = []
         if out_dir:
-            cmd = f"env CINETIC_NODE_RESULTS_DIR={shlex.quote(out_dir)} {cmd}"
+            env_assigns.append(f"CINETIC_NODE_RESULTS_DIR={shlex.quote(out_dir)}")
+        for var in ("CINETIC_APP_ID", "CINETIC_COLLECT"):
+            val = os.environ.get(var)
+            if val is not None:
+                env_assigns.append(f"{var}={shlex.quote(val)}")
+        if env_assigns:
+            cmd = "env " + " ".join(env_assigns) + " " + cmd
 
         # --- WRAPPER LOGIC ---
         # If there are preliminary commands (e.g. 'module load openmpi'), run them

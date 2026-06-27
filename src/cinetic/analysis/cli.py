@@ -39,9 +39,29 @@ def _default_topology(run_dir: str) -> str | None:
 
 
 def analyze_exp_dir(exp_dir: str, args) -> int:
-    ds = parse.parse_exp_dir(exp_dir)
+    """Analyze every app in *exp_dir* (one report set per app).
+
+    A multi-app experiment namespaces files by app id; each app is a distinct
+    benchmark and is analyzed independently. With more than one app, outputs go
+    to ``analysis/app_<id>/`` so they don't overwrite each other."""
+    app_ids = parse.app_ids_in_dir(exp_dir)
+    multi = len(app_ids) > 1
+    rc = 1
+    for app_id in app_ids:
+        sub = None
+        if multi:
+            sub = f"app_{app_id}" if app_id is not None else "app_legacy"
+        if _analyze_one(exp_dir, app_id, sub, args) == 0:
+            rc = 0
+    return rc
+
+
+def _analyze_one(exp_dir: str, app_id, subdir, args) -> int:
+    ds = parse.parse_exp_dir(exp_dir, app_id=app_id)
     if not ds.matches:
-        print(f"[skip] {exp_dir}: no parseable node files", file=sys.stderr)
+        if app_id is not None:
+            print(f"[skip] {exp_dir} (app {app_id}): no parseable node files",
+                  file=sys.stderr)
         return 1
 
     params = prm.resolve_params(exp_dir, args.msg_size, args.window,
@@ -63,6 +83,8 @@ def analyze_exp_dir(exp_dir: str, args) -> int:
                      min_nodes=args.min_nodes)
 
     report = report_text.format_report(an, ol, topo_path)
+    if subdir:
+        print(f"\n################ {subdir} ################")
     print(report)
 
     # detailed per-peer and per-round-per-node views (verbose: written to files
@@ -74,6 +96,8 @@ def analyze_exp_dir(exp_dir: str, args) -> int:
         print("\n" + per_round_per_node)
 
     outdir = args.outdir or os.path.join(exp_dir, "analysis")
+    if subdir:
+        outdir = os.path.join(outdir, subdir)
     os.makedirs(outdir, exist_ok=True)
     with open(os.path.join(outdir, "report.txt"), "w") as fh:
         fh.write(report + "\n")

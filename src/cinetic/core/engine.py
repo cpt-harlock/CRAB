@@ -130,7 +130,17 @@ def run_job(job, wlmanager, ppn: int, pre_commands: List[str] = None):
     """launches an application process via the workload manager."""
     if not job.node_list:
         raise Exception(f"Application {job.id_num} has 0 allocated nodes.")
-    
+
+    # Make this app's identity reach the launched ranks so the standardized
+    # per-node writer (results.h) namespaces its files by app id and skips
+    # emitting for non-collecting apps. All apps in an experiment share one
+    # results dir, each with its own MPI_COMM_WORLD (ranks 0..n-1), so without
+    # this co-located apps would clobber each other's node_*.csv. The slurm
+    # backend forwards these via `srun --export=ALL`; the mpi backend reads them
+    # back from the environment into its explicit `env VAR=value` prefix.
+    os.environ["CINETIC_APP_ID"] = str(job.id_num)
+    os.environ["CINETIC_COLLECT"] = "1" if getattr(job, "collect_flag", True) else "0"
+
     # Pass pre_commands through to the workload manager.
     cmd_string = wlmanager.run_job(job.node_list, ppn, job.run_app(), pre_commands=pre_commands)
     
