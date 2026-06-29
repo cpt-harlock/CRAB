@@ -20,9 +20,7 @@
             "NCCL_IB_SL": "${NCCL_IB_SL}"
         },
         "sbatch": [
-            "--account=IscrB_SWING",
-            "--partition=boost_usr_prod",
-            "--gres=tmpfs:0"
+            "--partition=dcgp_usr_prod"
         ],
         "header": [
             "module purge",
