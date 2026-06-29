@@ -494,6 +494,13 @@ class ExperimentRunner:
                 else:
                     static_schedule.append((i, 'k', val))
 
+        # Role sets for the run-end rule: victims (end="") are waited on; once they
+        # all finish, aggressors (end="f") are killed — they exist only to load the
+        # fabric. Without this an endless aggressor keeps the loop alive until the
+        # wall timeout (it never exits and never has a scheduled kill).
+        victim_ids = {i for i, a in enumerate(self.apps) if a.config_end == ''}
+        aggressor_ids = {i for i, a in enumerate(self.apps) if a.config_end == 'f'}
+
         try:
             # Single execution — there is no multi-run convergence loop.
             while True:
@@ -609,6 +616,18 @@ class ExperimentRunner:
                                 curr_schedule.sort(key=lambda x: x[2])
                             started_deps.append(waiter)
                     for s in started_deps: del curr_deps[s]
+
+                    # 4. Run-end rule: once every victim has finished, kill any
+                    # still-running aggressors (end="f"). Guarded by victim_ids so
+                    # an aggressor-only experiment doesn't get killed at t=0.
+                    if (aggressor_ids and victim_ids and victim_ids <= finished
+                            and (running & aggressor_ids)):
+                        for aid in list(running & aggressor_ids):
+                            self.log(f"[{self.name}] victims done; stopping "
+                                     f"aggressor app {aid}.")
+                            end_job(self.apps[aid])
+                            running.remove(aid)
+                            finished.add(aid)
 
                     if not curr_schedule and not curr_deps and not running:
                         break # Run finished
