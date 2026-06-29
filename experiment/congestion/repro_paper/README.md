@@ -26,9 +26,10 @@ Sensi), specifically **Figure 5 (center column)** — steady congestion, ring
   the aggressor as fixed background noise without stating its size. Default
   `AGGR_MSG=1048576` (1 MiB, which maximised contention in our own DCGP
   dose-response). Override to taste.
-- **Booster account / QOS** — site-specific. Defaults `ACCOUNT=IscrB_SWING`,
-  `PARTITION=boost_usr_prod`, `GRES=tmpfs:0`, no explicit QOS. Large allocations
-  (e.g. 256 nodes) likely need a production QOS — set `QOS=boost_qos_bprod`.
+- **Booster account / QOS** — site-specific. Defaults: `PARTITION=boost_usr_prod`,
+  `GRES=tmpfs:0`, **no account and no QOS** (the ISCRA allocation expired, so the
+  job uses the user's default account / default QOS). Set `ACCOUNT=…` / `QOS=…`
+  to add them (large allocations may need a production QOS).
 
 ## Run
 

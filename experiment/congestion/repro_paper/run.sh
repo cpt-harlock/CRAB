@@ -26,11 +26,11 @@ WALLTIME="${WALLTIME:-00:30:00}"
 AGGR_MSG="${AGGR_MSG:-1048576}"
 
 # --- Leonardo Booster scheduler directives (override the DCGP preset) ---------
+# ACCOUNT/QOS default to empty (the ISCRA allocation expired) -> the job uses the
+# user's default account and the default QOS. Set ACCOUNT=/QOS= to add them.
 PARTITION="${PARTITION:-boost_usr_prod}"
-ACCOUNT="${ACCOUNT:-IscrB_SWING}"
+ACCOUNT="${ACCOUNT:-}"
 GRES="${GRES:-tmpfs:0}"
-# Large Booster allocations likely need a production QOS — set e.g.
-# QOS=boost_qos_bprod (leave empty to use the default QOS).
 QOS="${QOS:-}"
 PRESET="leonardo"
 
@@ -38,9 +38,10 @@ REPO_ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 cd "$REPO_ROOT"
 GEN="experiment/congestion/repro_paper/generated"; mkdir -p "$GEN"
 
-sbatch_args=(--no-auto-qos --sbatch="--partition=$PARTITION"
-             --sbatch="--account=$ACCOUNT" --sbatch="--gres=$GRES")
-[ -n "$QOS" ] && sbatch_args+=(--sbatch="--qos=$QOS")
+sbatch_args=(--no-auto-qos --sbatch="--partition=$PARTITION")
+[ -n "$GRES" ]    && sbatch_args+=(--sbatch="--gres=$GRES")
+[ -n "$ACCOUNT" ] && sbatch_args+=(--sbatch="--account=$ACCOUNT")
+[ -n "$QOS" ]     && sbatch_args+=(--sbatch="--qos=$QOS")
 
 n=0
 for AGG in $AGGRESSORS; do
