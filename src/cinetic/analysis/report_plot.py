@@ -694,6 +694,46 @@ def plot_fabric(fl, out_path: str, top_n: int = 15) -> str:
     return out_path
 
 
+def plot_blame(br, out_path: str, top_n: int = 15) -> str:
+    """Suspect fabric elements as a horizontal bar chart of slowness (%).
+
+    *br* is a :class:`cinetic.analysis.blame.BlameResult`. Leaf/node suspects
+    (high confidence) and spine suspects (low confidence) are colored apart."""
+    import matplotlib
+    if matplotlib.get_backend().lower() != "agg":
+        matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    items = ([(s, "leaf") for s in br.leaf_suspects[:top_n]]
+             + [(s, "node") for s in br.node_suspects[:top_n]]
+             + [(s, "spine") for s in br.spine_suspects[:top_n]])
+    if not items:
+        return ""
+    kind_color = {"leaf": "#d62728", "node": "#ff7f0e", "spine": "#9467bd"}
+    labels = [f"{s.name[-12:]} [{k}]" for s, k in items]
+    vals = [s.median_slowness * 100 for s, k in items]
+    colors = [kind_color[k] for s, k in items]
+
+    y = np.arange(len(items))
+    fig, ax = plt.subplots(figsize=(8, max(3, len(items) * 0.4)))
+    ax.barh(y, vals, color=colors)
+    ax.set_yticks(y)
+    ax.set_yticklabels(labels, fontsize=8)
+    ax.invert_yaxis()
+    ax.set_xlabel(f"slowness vs ref {br.ref_bw:.1f} GB/s (%)")
+    ax.set_title(f"Fabric fault localization — {len(items)} suspect element(s)")
+    from matplotlib.patches import Patch
+    seen = {k for _, k in items}
+    ax.legend(handles=[Patch(color=kind_color[k],
+                             label=f"{k} ({'high' if k != 'spine' else 'low'} conf)")
+                       for k in ("leaf", "node", "spine") if k in seen], fontsize=8)
+    ax.grid(True, axis="x", alpha=0.3)
+    fig.tight_layout()
+    fig.savefig(out_path, dpi=120)
+    plt.close(fig)
+    return out_path
+
+
 def plot_comparison(cr, out_path: str) -> str:
     """Cross-experiment comparison: overall bandwidth per series (+ trend line if
     present) and a grouped per-topology-label bar chart.

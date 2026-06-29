@@ -17,7 +17,7 @@ import json
 import os
 import sys
 
-from cinetic.analysis import compare, congestion, context, fabric, health, metrics, outliers as outl, params as prm, parse, topo
+from cinetic.analysis import blame, compare, congestion, context, fabric, health, metrics, outliers as outl, params as prm, parse, topo
 from cinetic.analysis import report_plot, report_text
 
 
@@ -95,6 +95,10 @@ def analyze_exp_dir(exp_dir: str, args) -> int:
     # experiment, since they shared the fabric concurrently.
     if getattr(args, "fabric", False) and built_all:
         _run_fabric(exp_dir, args, built_all)
+    # fault localization (gap #2): the inverse of fabric load — blame slow flows
+    # on shared switches/links.
+    if getattr(args, "blame", False) and built_all:
+        _run_blame(exp_dir, args, built_all, ctx)
     return rc
 
 
@@ -207,6 +211,41 @@ def _run_fabric(exp_dir: str, args, built_all) -> None:
         except Exception as exc:  # noqa: BLE001
             print(f"[warn] fabric plot failed: {exc}", file=sys.stderr)
     print(f"[fabric] wrote attribution to {outdir}", file=sys.stderr)
+
+
+def _run_blame(exp_dir: str, args, built_all, ctx) -> None:
+    """Localize under-performance to switches/links across the experiment's apps
+    (gap #2 — the inverse of fabric load attribution)."""
+    topo_path = args.topology or _default_topology(os.path.dirname(exp_dir))
+    topology = topo.load_topology(topo_path) if topo_path else None
+    if topology is None:
+        print("[blame] no topology — skipping fault localization", file=sys.stderr)
+        return
+    analyses = [b[0] for b in built_all]
+    ref_bw = _resolve_expected_bw(exp_dir, args)
+    is_loaded = bool(ctx is not None and ctx.is_loaded)
+    br = blame.compute_blame(analyses, topology, ref_bw=ref_bw,
+                             is_loaded=is_loaded)
+    if br is None:
+        print("[blame] <80% of hosts resolve in the topology — skipping "
+              "(wrong topology file?)", file=sys.stderr)
+        return
+    text = blame.format_blame(br, top_n=args.hotspots)
+    print("\n" + text)
+    outdir = args.outdir or os.path.join(exp_dir, "analysis")
+    os.makedirs(outdir, exist_ok=True)
+    with open(os.path.join(outdir, "fabric_blame.txt"), "w") as fh:
+        fh.write(text + "\n")
+    if args.json:
+        with open(os.path.join(outdir, "fabric_blame.json"), "w") as fh:
+            json.dump(blame.build_blame_summary(br), fh, indent=2)
+    if not args.no_plots:
+        try:
+            report_plot.plot_blame(br, os.path.join(outdir, "fabric_blame.png"),
+                                   top_n=args.hotspots)
+        except Exception as exc:  # noqa: BLE001
+            print(f"[warn] blame plot failed: {exc}", file=sys.stderr)
+    print(f"[blame] wrote fault localization to {outdir}", file=sys.stderr)
 
 
 def _parse_app_id(exp_dir: str, app):
@@ -464,6 +503,10 @@ def main(argv=None) -> int:
                     help="skip the victim-vs-baseline congestion comparison")
     ap.add_argument("--fabric", action="store_true",
                     help="attribute per-switch/per-link load (needs --topology)")
+    ap.add_argument("--blame", action="store_true",
+                    help="localize under-performance to switches/links — blame "
+                         "slow flows on shared fabric (needs --topology; pairs "
+                         "with --expected-bw as the reference)")
     ap.add_argument("--hotspots", type=int, default=15,
                     help="top-N congested links/switches to report (default 15)")
     args = ap.parse_args(argv)

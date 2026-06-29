@@ -63,6 +63,10 @@ The analyzer auto-detects the `baseline` vs `loaded` victim and writes
 
 Single-run point estimate (final-run-only) is flagged in the report.
 
+Add `--blame --expected-bw 24.5` to localize *where* the slowdown concentrates:
+on the loaded run it points at the contended spine switch/links (a `loaded`
+warning is printed, since blame then localizes congestion rather than a fault).
+
 ## Knobs to vary next
 
 - **Aggressor intensity**: `-msgsize` on app 1 (bigger alltoall messages = more

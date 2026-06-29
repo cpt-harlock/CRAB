@@ -1,6 +1,15 @@
 # PLAN — Fabric fault localization (slow → switch/link blame)
 
-Status: **DESIGN** (not started). Addresses gap #2 from the tournament
+Status: **DONE** (M1–M4). Implemented in `analysis/blame.py` (+ `--blame` CLI,
+`report_plot.plot_blame`, `tests/test_blame.py`). One design change vs the draft
+below: Stage A keys on **intra-leaf flows** (a leaf is blamed when ≥2 of its
+nodes are slow on same-switch traffic with no single common node) rather than the
+residual-on-overall-median sketch — the residual cancels when a bad leaf depresses
+its own nodes' medians, and intra-leaf flows cleanly separate leaf/node/spine.
+The overall-median lone-node fallback was dropped (it re-introduced the spine
+confounder for nodes with no same-switch peer, e.g. interleaved-partition victims).
+
+Addresses gap #2 from the tournament
 sanity-check review: today the fabric layer (`analysis/fabric.py`) tells you
 which switch/link *carries* the most traffic (ECMP expected **load**); it does
 **not** tell you which switch/link is *underperforming*. This plan adds the
@@ -123,14 +132,13 @@ existing topology test style.
 
 ## Milestones
 
-- **M1** — `blame.py`: slowness model + Stage A leaf blame (node-controlled) +
+- **M1 ✅** — `blame.py`: slowness model + Stage A leaf/node blame (intra-leaf) +
   `fabric_blame.{txt,json}`; `--blame` CLI wiring.
-- **M2** — Stage B spine link/switch blame via ECMP residual distribution, with
-  the separability check + low-confidence labelling.
-- **M3** — confounder hardening: node-vs-leaf separation, `loaded`-experiment
-  guard, confidence scoring; plot.
-- **M4** — synthetic validation fixtures + `tests/test_blame.py`; CLAUDE.md +
-  README docs.
+- **M2 ✅** — Stage B spine link/switch blame via ECMP slowness distribution,
+  low-confidence labelling.
+- **M3 ✅** — confounder hardening: intra-leaf node-vs-leaf separation,
+  `loaded`-experiment guard, confidence scoring; `plot_blame`.
+- **M4 ✅** — synthetic validation `tests/test_blame.py` (4 scenarios) + CLAUDE.md.
 
 ## Known limitations (state in the report)
 

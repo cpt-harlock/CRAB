@@ -314,6 +314,18 @@ layer (`PLAN_ANALYSIS_REWORK.md`). It reads the run's `config.json` /
   collecting apps (concurrent fabric load). `--hotspots N`; writes
   `fabric.txt`/`.json` + a per-switch load bar. Skips (warns) when <80% of hosts
   resolve. Candidate exposure, not a claimed route.
+- **Fabric fault localization** (`analysis/blame.py`, `--blame`): the *inverse*
+  of fabric load — takes the **slow** flows and blames the shared switch/link.
+  Per-flow slowness `1 - bw/ref` (`ref` = `--expected-bw` or the median flow
+  bw). Stage A (deterministic, HIGH confidence) keys on **intra-leaf** flows: a
+  leaf is blamed only when ≥2 of its nodes are slow on same-switch traffic with
+  no single common node (else it's a node/NIC fault); this isolates leaf vs node
+  vs spine. Stage B distributes cross-leaf slowness over spine switches/links via
+  the ECMP fractions (LOW confidence, dilution-capped). Warns on `loaded`
+  experiments (blame then localizes the induced congestion, not a fault). Writes
+  `fabric_blame.txt`/`.json` + a suspect-element bar. Validated by
+  `tests/test_blame.py` (healthy / slow-node / slow-leaf / slow-spine).
+  Design: `PLAN_FABRIC_FAULT_LOCALIZATION.md`.
 - **Cross-experiment compare** (`analysis/compare.py`, goal 2,
   `cinetic analyze compare <dirA> <dirB> …`): aligns N run/exp dirs by node +
   topology label (same-kind only; mixed flagged), reports deltas vs the first
