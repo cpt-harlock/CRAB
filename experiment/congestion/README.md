@@ -50,6 +50,30 @@ experiment/congestion/run.sh experiment/congestion/configs/congestion_a2a_n16.js
 experiment/congestion/analyze.sh
 ```
 
+### 2D sweep (node count × aggressor message size)
+
+`run_sweep.sh` / `analyze_sweep.sh` generate the grid on the fly (`gen_config.py`
+→ `generated/`, gitignored): victim = `tournament_nb` at a fixed saturating size,
+aggressor = `a2a_nb -endl` at the swept message size (the dose-response knob).
+
+Axes (override via env vars):
+- `NODE_COUNTS="4 8 16 32 64 128 256 512 1024"` — powers of two ≥4 (split 50:50,
+  so N/2 must be an even, tournament-valid rank count).
+- `MSG_SIZES="8 64 512 4096 32768 262144 2097152 16777216"` (8 B → 16 MB, ×8).
+
+```bash
+experiment/congestion/run_sweep.sh                 # full grid (9×8 = 72 jobs)
+NODE_COUNTS="64" MSG_SIZES="262144 2097152" experiment/congestion/run_sweep.sh  # subset
+experiment/congestion/analyze_sweep.sh             # per-run + dose-response
+```
+
+`analyze_sweep.sh` runs `compare-congestion` across aggressor message sizes for
+each node count, writing the dose-response table under
+`data/leonardo/_sweep_analysis/congestion/n<N>/congestion_compare.{txt,json,png}`
+(x = aggressor message size). Small node counts (<32) sit on a single
+non-blocking leaf → ~0% drop (negative control); spine congestion needs the
+larger cells.
+
 ## What to read
 
 The analyzer auto-detects the `baseline` vs `loaded` victim and writes

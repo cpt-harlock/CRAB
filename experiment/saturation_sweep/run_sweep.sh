@@ -1,32 +1,38 @@
 #!/bin/bash
-# Tournament bandwidth saturation sweep over node counts (Leonardo DCGP).
+# Tournament bandwidth saturation sweep — 2D: node count x message size
+# (Leonardo DCGP). One Slurm job per (nodes, msgsize) cell, submitted via the
+# cinetic CLI; configs are generated on the fly into generated/ (gitignored).
 #
-# A node-count sweep cannot share one Slurm allocation (every experiment in a
-# job receives the full allocation), so this submits ONE job per node count via
-# the cinetic CLI — it is just a loop around `cinetic run`, nothing custom.
-#
-# Run from anywhere; it cd's to the repo root so cinetic resolves presets/paths.
+# Axes (edit to run a subset):
+#   NODE_COUNTS : powers of two, tournament needs an even rank count.
+#   MSG_SIZES   : 8 B .. 16 MB, x8 each step.
 set -euo pipefail
 
-# even node counts only (tournament needs an even rank count with ppn=1)
-NODE_COUNTS="2 4 8 16 32 64"
+NODE_COUNTS="${NODE_COUNTS:-2 4 8 16 32 64 128 256 512 1024}"
+MSG_SIZES="${MSG_SIZES:-8 64 512 4096 32768 262144 2097152 16777216}"
 PRESET="leonardo"
 
 REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$REPO_ROOT"
-CFG_DIR="experiment/saturation_sweep/configs"
+HERE="experiment/saturation_sweep"
+GEN="$HERE/generated"
+mkdir -p "$GEN"
 
+n=0
 for N in $NODE_COUNTS; do
-  cfg="$CFG_DIR/tournament_N${N}.json"
-  if [ ! -f "$cfg" ]; then
-    echo "!! missing config $cfg (skipping)" >&2
-    continue
-  fi
-  echo "=== submitting tournament saturation: ${N} nodes ($cfg) ==="
-  cinetic run -p "$PRESET" -c "$cfg"
+  for M in $MSG_SIZES; do
+    cfg="$GEN/tournament_n${N}_m${M}.json"
+    python "$HERE/gen_config.py" --nodes "$N" --msgsize "$M" -o "$cfg" >/dev/null
+    echo "=== submitting saturation: ${N} nodes, msg ${M} B ==="
+    cinetic run -p "$PRESET" -c "$cfg"
+    n=$((n + 1))
+  done
 done
 
 echo
-echo "Submitted node counts: ${NODE_COUNTS}"
-echo "Results will land under data/leonardo/tournament_sat_n<N>_<timestamp>/"
-echo "When the jobs finish, analyze with: experiment/saturation_sweep/analyze_sweep.sh"
+echo "Submitted $n job(s) over nodes={$NODE_COUNTS} x msg={$MSG_SIZES}."
+echo "Results: data/leonardo/tournament_sat_n<N>_m<M>_<timestamp>/"
+echo "Analyze with: $HERE/analyze_sweep.sh"
+echo
+echo "NB: the full grid is large and the big cells (>=512 nodes, >=2 MB) are heavy"
+echo "    — submit a subset first via e.g.  NODE_COUNTS='2 4 8' MSG_SIZES='4096' $0"

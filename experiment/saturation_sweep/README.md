@@ -1,40 +1,51 @@
 # Tournament bandwidth saturation sweep (Leonardo DCGP)
 
-Runs `benchmarks/blink/tournament_nb` across node counts with a message/window
-size that saturates the link, to measure per-node pairwise bandwidth (and its
-topology breakdown) as the job scales.
+Runs `benchmarks/blink/tournament_nb` across a **2D grid** of node count × message
+size, to measure per-node pairwise bandwidth (and its topology breakdown) over
+the latency→bandwidth transition as the job scales.
 
 ## What it does
 
-- One `cinetic run` per node count (a node sweep can't share a Slurm
-  allocation), preset `leonardo` (slurm backend, `dcgp_usr_prod`,
-  `--account=IscrB_SWING`).
-- `tournament_nb -msgsize 4194304 -window 64` → 512 MB per full-duplex exchange,
-  which saturates the rail when the fabric is healthy.
-- `ppn=1` so each rank owns its node's link (per-node bandwidth). Node counts are
-  **even** — the tournament requires an even rank count.
-- `-maxsamples 4000` keeps the per-node LRU ring from wrapping ((N−1)·iters).
+- One `cinetic run` per `(nodes, msgsize)` cell (a node sweep can't share a Slurm
+  allocation), preset `leonardo` (slurm backend, `dcgp_usr_prod`). Configs are
+  **generated on the fly** by `gen_config.py` into `generated/` (gitignored) — no
+  ~80 static files.
+- `tournament_nb -msgsize <M> -window 64`, `ppn=1` so each rank owns its node's
+  link (per-node bandwidth). `maxsamples` is sized per node count so the LRU ring
+  doesn't wrap ((N−1)·iters). The big-job DCGP QOS (`dcgp_qos_bprod` +
+  `--cpus-per-task=112`) is added automatically at ≥32 nodes.
 
-Node counts: `2 4 8 16 32 64` (edit `NODE_COUNTS` in the scripts to change).
+Axes (override via env vars on either script):
+- `NODE_COUNTS="2 4 8 16 32 64 128 256 512 1024"` (even, tournament needs an even
+  rank count).
+- `MSG_SIZES="8 64 512 4096 32768 262144 2097152 16777216"` (8 B → 16 MB, ×8).
 
 ## Run
 
 ```bash
-# 0. (on Leonardo) build the benchmark under the SAME modules the preset loads,
-#    so the binary matches the runtime MPI:
+# 0. (on Leonardo) build the benchmark under the SAME modules the preset loads:
 module purge && module load openmpi
 ( cd benchmarks/blink && make )
 
-# 1. submit the sweep (one Slurm job per node count)
+# 1. submit the full grid (one Slurm job per (nodes, msgsize) cell)
 experiment/saturation_sweep/run_sweep.sh
+#    …or a subset, e.g. a quick smoke test:
+NODE_COUNTS="2 4 8" MSG_SIZES="4096 262144" experiment/saturation_sweep/run_sweep.sh
 
-# 2. after the jobs finish, analyze + compare (bandwidth vs node count)
+# 2. after the jobs finish: per-run reports + a bandwidth-vs-nodes `compare`
+#    for each message size
 experiment/saturation_sweep/analyze_sweep.sh
 ```
 
-Results land under `data/leonardo/tournament_sat_n<N>_<timestamp>/`. The
-comparison (overall/by-locality bandwidth vs node count, with a trend) is written
-to the first run's `analysis/comparison.{txt,json,png}`.
+Per-run results land under `data/leonardo/tournament_sat_n<N>_m<M>_<timestamp>/`.
+The per-message-size scaling curves (overall/by-locality bandwidth vs node count,
+with a trend) are written under
+`data/leonardo/_sweep_analysis/saturation/m<M>/comparison.{txt,json,png}`.
+
+> The full grid is large (10×8 = 80 jobs) and the big cells (≥512 nodes, ≥2 MB)
+> are heavy; submit a subset first and confirm QOS limits allow your largest node
+> count. The original 1D per-node configs (`configs/tournament_N*.json`) remain as
+> documented examples.
 
 ### Absolute sanity check (catch fabric-wide slowdowns)
 
