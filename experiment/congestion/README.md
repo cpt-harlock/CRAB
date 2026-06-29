@@ -67,10 +67,48 @@ Add `--blame --expected-bw 24.5` to localize *where* the slowdown concentrates:
 on the loaded run it points at the contended spine switch/links (a `loaded`
 warning is printed, since blame then localizes congestion rather than a fault).
 
+## Findings (n64, 32 victim + 32 aggressor, 2026-06-29)
+
+Configs: `congestion_a2a_n64*.json`. Single-run point estimates — the absolute
+numbers carry run-to-run variance, but the two qualitative laws below are robust.
+
+**Placement is decisive.** At a fixed 2 MB aggressor intensity:
+
+| placement                         | victim bandwidth drop |
+|-----------------------------------|----------------------:|
+| interleaved (`i`, shared cells)   | **+38.3%**            |
+| separate partitions (`l`)         | **+0.0%**             |
+
+When victim and aggressor occupy *different* cells they share no spine links, so
+there is no contention — confirming the slowdown is shared-spine congestion (and
+that the partition layout control works as intended).
+
+**Intensity is non-monotonic** (interleaved), peaking near 1–2 MB:
+
+| aggressor `-msgsize` | overall drop | cross_cell | same_cell |
+|----------------------|-------------:|-----------:|----------:|
+| 256 KB               | +3.8%        | +4.2%      | +3.9%     |
+| 1 MB                 | +28.3%       | +37.2%     | +14.6%    |
+| 2 MB                 | **+38.3%**   | +44.9%     | +21.7%    |
+| 4 MB                 | +1.4%        | −1.5%      | +0.8%     |
+
+cross_cell (spine-crossing) traffic is always hit ~2× harder than same_cell. The
+4 MB collapse is likely a *duty-cycle* effect: a 4 MB alltoall on 32 ranks moves
+128 MB/rank/iteration, so the aggressor completes only a few large, infrequent
+bursts (with barrier gaps) during the victim's run — lower time-averaged
+bisection occupancy than the rapid back-to-back alltoalls at 1–2 MB. Worth
+repeating to separate this from single-run variance.
+
+> The per-run baseline-vs-loaded diff is produced by the analyzer
+> (`congestion.{txt,json}`; the JSON is a list of comparisons, each with
+> `overall.bw_drop_pct` + `by_label` + `per_node`). The **cross-config** table
+> above is *not* a built-in output — it was assembled by reading each run's
+> `congestion.json`. `cinetic analyze compare` compares raw bandwidth across
+> runs, not congestion deltas, and has no notion of the swept parameter.
+
 ## Knobs to vary next
 
-- **Aggressor intensity**: `-msgsize` on app 1 (bigger alltoall messages = more
-  bisection pressure).
+- **Aggressor intensity**: `-msgsize` on app 1 (sweet spot ~1–2 MB, see above).
 - **Placement**: `partitionlayout=l` (separate, contiguous partitions) vs `i`
   (interleaved) to contrast shared-cell vs separate-cell contention.
 - **Scale**: copy the config to other even node counts (`numnodes`, keep 50:50).
