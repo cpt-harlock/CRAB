@@ -1,0 +1,24 @@
+{
+  "global_options": {
+    "numnodes": "16",
+    "ppn": "1",
+    "allocationmode": "l",
+    "timeout": "1500.0",
+    "walltime": "00:30:00",
+    "outformat": "csv",
+    "name": "tournament_sat_n16"
+  },
+  "experiments": {
+    "saturation": {
+      "apps": {
+        "0": {
+          "path": "tournament_nb.py",
+          "args": "-msgsize 4194304 -window 64 -maxsamples 4000",
+          "collect": true,
+          "start": "0",
+          "end": ""
+        }
+      }
+    }
+  }
+}
