@@ -267,7 +267,18 @@ The analyzer auto-detects one of three **kinds** and adapts the report:
 
 Reports **bandwidth** (busbw aggregate decimal GB/s; convention printed in the
 report) and **latency** (`duration/ops`), robust stats with std dev, and flagged
-under-performing nodes. Writes `report.txt`, `peer_profiles.txt` (pairwise),
+under-performing nodes. Under-performance uses two **relative** rules (robust
+z-score, `frac*median`) plus — when a nominal per-node bandwidth is supplied via
+`--expected-bw` (GB/s, same full-duplex busbw basis; falls back to
+`CINETIC_EXPECTED_BW` in `environment.json`) — an **absolute-vs-nominal** rule
+(`--expected-frac`, default 0.8) that fires at any node count and raises a
+**fabric-wide degradation** verdict when the run median itself drops below the
+floor (the blind spot the relative rules miss). Benchmark **hard-stall** signals
+are surfaced too: the engine persists each collecting app's stderr to
+`stderr_app_<id>.log` on success, and `analysis/health.py` scrapes the
+tournament's `Total window timeouts: N` into the report + `summary.json`
+(`window_timeouts`; `None` = no log reported it). Writes `report.txt`,
+`peer_profiles.txt` (pairwise),
 `per_round_per_node.txt`, `summary.json` (`--json`), and figures to
 `<exp_dir>/analysis/`; `--detail` echoes the per-peer / per-round tables to
 stdout. A multi-app experiment is analyzed **per app** (files grouped by the

@@ -166,6 +166,8 @@ class Analysis:
     app_id: Optional[str] = None
     role: Optional[str] = None
     output_kind: Optional[str] = None
+    # total window timeouts reported by the benchmark (hard stalls); None=unknown
+    window_timeouts: Optional[int] = None
 
 
 def build_pairings(ds: Dataset, params: Params,

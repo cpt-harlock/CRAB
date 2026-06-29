@@ -17,7 +17,7 @@ import json
 import os
 import sys
 
-from cinetic.analysis import compare, congestion, context, fabric, metrics, outliers as outl, params as prm, parse, topo
+from cinetic.analysis import compare, congestion, context, fabric, health, metrics, outliers as outl, params as prm, parse, topo
 from cinetic.analysis import report_plot, report_text
 
 
@@ -36,6 +36,34 @@ def _default_topology(run_dir: str) -> str | None:
     repo = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
     cand = os.path.join(repo, "topologies", "leonardo.json")
     return cand if os.path.isfile(cand) else None
+
+
+def _resolve_expected_bw(exp_dir: str, args) -> float | None:
+    """Nominal per-node bandwidth (GB/s) for the absolute sanity-check rule.
+
+    CLI ``--expected-bw`` wins; otherwise fall back to ``CINETIC_EXPECTED_BW`` in
+    the run's ``environment.json`` so a system preset can set it once. ``None``
+    when neither is present (the absolute rule is then simply skipped)."""
+    if getattr(args, "expected_bw", None) is not None:
+        return float(args.expected_bw)
+    run_dir = os.path.dirname(exp_dir.rstrip(os.sep))
+    for env_path in (os.path.join(exp_dir, "environment.json"),
+                     os.path.join(run_dir, "environment.json")):
+        if not os.path.isfile(env_path):
+            continue
+        try:
+            env = json.load(open(env_path))
+        except (OSError, json.JSONDecodeError):
+            continue
+        val = env.get("CINETIC_EXPECTED_BW")
+        if val not in (None, ""):
+            try:
+                return float(val)
+            except (TypeError, ValueError):
+                print(f"[warn] CINETIC_EXPECTED_BW={val!r} is not a number; "
+                      "ignoring", file=sys.stderr)
+        break
+    return None
 
 
 def analyze_exp_dir(exp_dir: str, args) -> int:
@@ -101,8 +129,11 @@ def _build_analysis(exp_dir: str, app_id, args, ctx=None):
         an.output_kind = app.output_kind
     elif app_id is not None:
         an.app_id = str(app_id)
+    an.window_timeouts = health.window_timeouts(exp_dir, app_id)
+    expected_bw = _resolve_expected_bw(exp_dir, args)
     ol = outl.detect(an.node_bw_median, k=args.slow_k, frac=args.slow_frac,
-                     min_nodes=args.min_nodes)
+                     min_nodes=args.min_nodes, expected_bw=expected_bw,
+                     expected_frac=args.expected_frac)
     return an, ol, topo_path
 
 
@@ -322,6 +353,11 @@ def main_compare(argv) -> int:
     ap.add_argument("--slow-k", type=float, default=3.0)
     ap.add_argument("--slow-frac", type=float, default=0.7)
     ap.add_argument("--min-nodes", type=int, default=8)
+    ap.add_argument("--expected-bw", type=float, dest="expected_bw",
+                    help="nominal per-node bandwidth GB/s (absolute rule); "
+                         "falls back to CINETIC_EXPECTED_BW")
+    ap.add_argument("--expected-frac", type=float, default=0.8,
+                    dest="expected_frac")
     args = ap.parse_args(argv)
     if len(args.dirs) < 2:
         print("error: compare needs >= 2 dirs", file=sys.stderr)
@@ -412,6 +448,15 @@ def main(argv=None) -> int:
                     help="absolute slow threshold = frac*median (default 0.7)")
     ap.add_argument("--min-nodes", type=int, default=8,
                     help="below this node count, demote z-score (default 8)")
+    ap.add_argument("--expected-bw", type=float, dest="expected_bw",
+                    help="nominal per-node bandwidth (GB/s, full-duplex busbw) for "
+                         "the absolute sanity-check rule; catches fabric-wide "
+                         "degradation. Falls back to CINETIC_EXPECTED_BW in "
+                         "environment.json")
+    ap.add_argument("--expected-frac", type=float, default=0.8,
+                    dest="expected_frac",
+                    help="flag nodes (and the run) below frac*expected-bw "
+                         "(default 0.8)")
     ap.add_argument("--baseline",
                     help="baseline run/exp dir for congestion comparison "
                          "(default: auto-detect a victim-only experiment)")

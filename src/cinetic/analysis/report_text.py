@@ -105,6 +105,18 @@ def format_report(an: Analysis, outliers: OutlierResult,
     L.append("-- OVERALL " + "-" * 67)
     L.append(f"bandwidth : {_bw_line(an.overall_bw)}")
     L.append(f"latency   : {_lat_line(an.overall_lat)}")
+    # nominal verdict (absolute sanity check) — only when an expected bw is known
+    if outliers.expected_bw == outliers.expected_bw:   # not nan
+        verdict = "DEGRADED" if outliers.fabric_wide_degraded else "OK"
+        L.append(f"vs nominal: median {_g(outliers.median_pct_nominal)}% of "
+                 f"{_g(outliers.expected_bw)} GB/s nominal  [{verdict}]")
+    # benchmark hard-stall signal (window timeouts) — None means unknown/no log
+    if an.window_timeouts is not None:
+        if an.window_timeouts > 0:
+            L.append(f"timeouts  : {an.window_timeouts} window timeout(s) "
+                     "(HARD STALLS — investigate; total across all ranks)")
+        else:
+            L.append("timeouts  : 0 window timeouts")
     L.append("")
 
     dist_title = "BANDWIDTH BY COMM SPAN" if collective \
@@ -170,11 +182,20 @@ def format_report(an: Analysis, outliers: OutlierResult,
     if outliers.low_confidence:
         L.append("  (LOW CONFIDENCE)")
     L.append(f"  global median {_g(outliers.median)} GB/s, MAD {_g(outliers.mad)}")
+    if outliers.expected_bw == outliers.expected_bw:   # not nan
+        L.append(f"  nominal {_g(outliers.expected_bw)} GB/s, floor "
+                 f"{_g(outliers.nominal_threshold)} GB/s "
+                 f"(median {_g(outliers.median_pct_nominal)}% of nominal)")
+        if outliers.fabric_wide_degraded:
+            L.append("  !! FABRIC-WIDE DEGRADATION: the median itself is below the "
+                     "nominal floor")
     if outliers.flagged:
         L.append(f"  flagged {len(outliers.flagged)} node(s):")
         for f in outliers.flagged:
+            nom = (f"  {f.pct_nominal:.0f}% nom" if f.pct_nominal == f.pct_nominal
+                   else "")
             L.append(f"    {f.node:<28} {_g(f.value):>8} GB/s  "
-                     f"dev {f.deviation_pct:+.1f}%  ({f.reason})")
+                     f"dev {f.deviation_pct:+.1f}%{nom}  ({f.reason})")
     else:
         L.append("  none flagged.")
     L.append("")
@@ -285,9 +306,15 @@ def build_summary(an: Analysis, outliers: OutlierResult, context=None) -> dict:
         "outliers": {"method": outliers.method,
                      "low_confidence": outliers.low_confidence,
                      "median": outliers.median, "mad": outliers.mad,
+                     "expected_bw": outliers.expected_bw,
+                     "nominal_threshold": outliers.nominal_threshold,
+                     "median_pct_nominal": outliers.median_pct_nominal,
+                     "fabric_wide_degraded": outliers.fabric_wide_degraded,
                      "flagged": [{"node": f.node, "value": f.value,
                                   "zscore": f.zscore,
                                   "deviation_pct": f.deviation_pct,
+                                  "pct_nominal": f.pct_nominal,
                                   "reason": f.reason} for f in outliers.flagged]},
+        "window_timeouts": an.window_timeouts,
         "warnings": an.warnings,
     }

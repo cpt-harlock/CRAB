@@ -567,17 +567,30 @@ class ExperimentRunner:
                                     except Exception as e:
                                         print(f"[CINETIC WARNING] Could not write error log file: {e}", file=sys.stderr)
 
-                                # --- Dump raw stdout on success (only when collecting) ---
+                                # --- Dump raw stdout/stderr on success (only when collecting) ---
                                 # Useful to inspect the benchmark's raw output (what
                                 # write_results() prints) without having to parse it.
-                                elif self.apps[aid].collect_flag and out:
-                                    decoded_out = out.decode('utf-8', errors='replace') if isinstance(out, bytes) else out
-                                    try:
-                                        stdout_path = os.path.join(self.exp_dir, f"stdout_app_{aid}.log")
-                                        with open(stdout_path, "a") as f:
-                                            f.write(f"=== Output ===\n{decoded_out}\n")
-                                    except Exception as e:
-                                        print(f"[CINETIC WARNING] Could not write stdout log file: {e}", file=sys.stderr)
+                                # stderr is kept too: benchmarks print health signals
+                                # there (e.g. tournament's "Total window timeouts: N"),
+                                # which are otherwise lost on a zero-exit run.
+                                elif self.apps[aid].collect_flag:
+                                    if out:
+                                        decoded_out = out.decode('utf-8', errors='replace') if isinstance(out, bytes) else out
+                                        try:
+                                            stdout_path = os.path.join(self.exp_dir, f"stdout_app_{aid}.log")
+                                            with open(stdout_path, "a") as f:
+                                                f.write(f"=== Output ===\n{decoded_out}\n")
+                                        except Exception as e:
+                                            print(f"[CINETIC WARNING] Could not write stdout log file: {e}", file=sys.stderr)
+                                    if err:
+                                        decoded_err = err.decode('utf-8', errors='replace') if isinstance(err, bytes) else err
+                                        if decoded_err.strip():
+                                            try:
+                                                stderr_path = os.path.join(self.exp_dir, f"stderr_app_{aid}.log")
+                                                with open(stderr_path, "a") as f:
+                                                    f.write(f"=== Stderr ===\n{decoded_err}\n")
+                                            except Exception as e:
+                                                print(f"[CINETIC WARNING] Could not write stderr log file: {e}", file=sys.stderr)
 
                             except Exception as e:
                                 self.log(f"[INTERNAL ERROR] Failed reading output for app {aid}: {e}")
@@ -860,11 +873,13 @@ class Engine:
         os.environ.update(_merge_worker_env(orig_env, environment))
         
         try:
-            node_file = "worker_nodelist.txt"
-            with open(node_file, "w") as f:
-                subprocess.call(["scontrol", "show", "hostnames", os.environ.get('SLURM_NODELIST')], stdout=f)
-            nodes_df = pandas.read_csv(node_file, header=None)
-            full_node_list = nodes_df.iloc[:, 0].tolist()
+            # Resolve the full allocation directly from scontrol. Capturing the
+            # output (instead of writing a shared relative-path temp file) keeps
+            # this race-free when several jobs run concurrently from the same cwd.
+            hostnames = subprocess.check_output(
+                ["scontrol", "show", "hostnames", os.environ.get('SLURM_NODELIST', '')],
+                text=True)
+            full_node_list = [h for h in hostnames.split() if h]
             
             global_opts = config.get('global_options', {})
             experiments = config.get('experiments', {})
@@ -899,5 +914,3 @@ class Engine:
         finally:
             os.environ.clear()
             os.environ.update(orig_env)
-            if os.path.exists("worker_nodelist.txt"):
-                os.remove("worker_nodelist.txt")
