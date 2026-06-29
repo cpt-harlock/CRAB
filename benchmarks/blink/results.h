@@ -31,9 +31,43 @@
  */
 
 #include <mpi.h>
+#include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+/* Graceful collective stop for endless "aggressor" runs.
+ *
+ * The engine stops an aggressor by sending SIGUSR1 (then SIGKILL as a fallback).
+ * A handler that wrote results directly would be unsafe (results writers do
+ * collective MPI) and would only flush legacy output. Instead the handler just
+ * sets a flag; the benchmark's endless loop polls cin_should_stop(), which
+ * MPI_Allreduce's the flag so *every* rank breaks on the same iteration (no
+ * collective mismatch / deadlock) and falls through to the normal
+ * cin_write_node_results() + cin_write_manifest() after the loop. This lets a
+ * collect:true aggressor flush its standardized per-node output before exiting. */
+static volatile sig_atomic_t cin_stop_flag = 0;
+
+static void cin_stop_handler(int sig) {
+  (void)sig;
+  cin_stop_flag = 1;
+}
+
+/* Install the SIGUSR1 -> flag handler. Call once after MPI_Init, replacing the
+   benchmark's old signal(SIGUSR1, sig_handler). */
+static void cin_install_stop_handler(void) {
+  signal(SIGUSR1, cin_stop_handler);
+}
+
+/* Collective: returns nonzero once any rank has been asked to stop. Call from
+   the endless-loop condition at a point where all ranks participate (e.g. the
+   outer pass boundary, after the per-iteration barriers). Short-circuit it
+   behind the `endless` flag so finite runs never pay the allreduce. */
+static int cin_should_stop(MPI_Comm comm) {
+  int local = (int)cin_stop_flag, global = 0;
+  MPI_Allreduce(&local, &global, 1, MPI_INT, MPI_MAX, comm);
+  return global;
+}
 
 /* Experiment output dir exported by CINETIC; legacy CRAB_ name accepted;
    fall back to the current working directory. */

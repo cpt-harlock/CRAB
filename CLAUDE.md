@@ -75,7 +75,7 @@ tests/                        # Standalone-runnable tests (no pytest dep) + fixt
 }
 ```
 
-`end` values: `""` = victim (wait to finish), `"f"` = aggressor (killed when victims finish), `"<N>"` = killed after N seconds.
+`end` values: `""` = victim (wait to finish), `"f"` = aggressor (killed when victims finish), `"<N>"` = killed after N seconds. Stopping a job (`"f"`/`"<N>"`) is **graceful**: the engine sends `SIGUSR1` (forwarded to the ranks by srun/mpirun), waits a grace period, then `SIGKILL` as a fallback. A benchmark that handles `SIGUSR1` (see `cin_install_stop_handler`/`cin_should_stop` below) can therefore flush its standardized output before exiting, so a `collect:true` aggressor's flows are captured by `--fabric`.
 `start` values: `"0"` = start immediately, `"<N>"` = delay N seconds, `"s<id>"` = start after app `id` finishes.
 
 ### Writing a new wrapper
@@ -119,6 +119,16 @@ cin_write_node_results(
     curr_iters, max_samples, warm_up_iters);
 cin_write_manifest(comm_id);   // race-free; call once after the dump
 ```
+
+**Endless / aggressor benchmarks** (those with an `-endl` loop, killed via
+`end="f"`) should opt into the graceful stop so they still reach the writers
+above when the engine stops them: call `cin_install_stop_handler()` once after
+`MPI_Init` (instead of the old `signal(SIGUSR1, sig_handler)`), and gate the
+endless loop on `cin_should_stop(MPI_COMM_WORLD)` —
+`} while (endless && !cin_should_stop(MPI_COMM_WORLD));`. `cin_should_stop` does a
+collective `MPI_Allreduce`, so every rank breaks on the same iteration (no
+collective-mismatch deadlock) and falls through to `cin_write_node_results` /
+`cin_write_manifest`. Without this, `SIGKILL` (the fallback) loses the dump.
 
 Three flavors, by how `peer`/`phase` are filled:
 - **pairwise** (e.g. `tournament_nb.c`): real per-sample `peer` + `phase`; the

@@ -1,4 +1,5 @@
 import subprocess
+import signal
 import numpy as np
 import scipy.stats as st
 import math
@@ -152,12 +153,27 @@ def run_job(job, wlmanager, ppn: int, pre_commands: List[str] = None):
     process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=False)
     job.set_process(process)
 
-def end_job(job):
-    """Forcefully terminates a job and retrieves output."""
-    if hasattr(job, 'process') and job.process:
-        job.process.kill()
-        out, err = job.process.communicate()
-        job.set_output(out, err)
+def end_job(job, grace: float = 15.0):
+    """Stop a job, giving it a chance to flush results first.
+
+    Sends SIGUSR1 (the graceful-stop signal; srun/mpirun forward it to the
+    ranks) so a collect:true aggressor can break its endless loop and write its
+    standardized per-node output, then waits up to *grace* seconds. A benchmark
+    that doesn't handle SIGUSR1 simply ignores it and is SIGKILLed at the
+    timeout — same outcome as before. SIGKILL is always the fallback."""
+    if not (hasattr(job, 'process') and job.process):
+        return
+    p = job.process
+    try:
+        p.send_signal(signal.SIGUSR1)
+    except (ProcessLookupError, OSError):
+        pass
+    try:
+        out, err = p.communicate(timeout=grace)
+    except subprocess.TimeoutExpired:
+        p.kill()
+        out, err = p.communicate()
+    job.set_output(out, err)
 
 def wait_timed(job, timeout_sec: float) -> bool:
     """Waits for a job with a timeout. Returns True if timed out."""
