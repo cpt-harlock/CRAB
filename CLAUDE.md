@@ -332,6 +332,14 @@ layer (`PLAN_ANALYSIS_REWORK.md`). It reads the run's `config.json` /
   series, fits an overall-bandwidth **trend** (auto run-dir timestamps or
   `--x index|timestamp|<nums>`), and supports `--bw-relative` (normalize to each
   series' own median). Writes `comparison.txt`/`.json` + an overlay plot.
+- **Cross-config congestion comparison** (`analysis/congestion.py`,
+  `cinetic analyze compare-congestion <runA> <runB> …`): the **dose-response**
+  view — computes each run's victim baseline-vs-loaded drop (reusing
+  `_congestion_results`) and tabulates overall + per-topology-label drop% across
+  configs, with an optional numeric `--x` (e.g. aggressor message size) for a
+  trend line. `--label` per config. Writes `congestion_compare.{txt,json,png}`.
+  (The per-run diff stays in `congestion.{txt,json}`; this aggregates them so the
+  sweep table is a first-class output, not assembled by hand.)
 
 These layers **consume** the per-app `Analysis` objects (they never re-parse or
 recompute bandwidth). `model.py` from the plan was folded in: role fields live on

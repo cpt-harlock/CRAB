@@ -657,6 +657,57 @@ def plot_congestion(cr, out_path: str) -> str:
     return out_path
 
 
+def plot_congestion_comparison(cc, out_path: str) -> str:
+    """Cross-config dose-response: victim bandwidth drop% per config (overall +
+    per topology label). *cc* is a
+    :class:`cinetic.analysis.congestion.CongestionComparison`. Drawn as a line vs
+    x when every config has a numeric x, else grouped bars per config."""
+    import matplotlib
+    if matplotlib.get_backend().lower() != "agg":
+        matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    rows = cc.rows
+    if not rows:
+        return ""
+    labels = [r.label for r in rows]
+    overall = [r.overall_bw_drop_pct for r in rows]
+    topo = cc.labels_seen
+    have_x = all(r.x is not None for r in rows)
+
+    fig, ax = plt.subplots(figsize=(max(7, len(rows) * 1.3), 5))
+    if have_x:
+        xs = [r.x for r in rows]
+        order = sorted(range(len(rows)), key=lambda i: xs[i])
+        xo = [xs[i] for i in order]
+        ax.plot(xo, [overall[i] for i in order], "-o", lw=2, color="#000000",
+                label="overall")
+        for lbl in topo:
+            ax.plot(xo, [rows[i].by_label_drop.get(lbl, float("nan"))
+                         for i in order], "-o", lw=1, label=lbl, alpha=0.8)
+        ax.set_xlabel("x (e.g. aggressor message size)")
+    else:
+        x = np.arange(len(rows))
+        series = [("overall", overall)] + \
+            [(lbl, [r.by_label_drop.get(lbl, float("nan")) for r in rows])
+             for lbl in topo]
+        n = len(series)
+        w = 0.8 / max(1, n)
+        for k, (name, vals) in enumerate(series):
+            ax.bar(x + (k - (n - 1) / 2) * w, vals, w, label=name)
+        ax.set_xticks(x)
+        ax.set_xticklabels(labels, rotation=30, ha="right", fontsize=8)
+    ax.axhline(0, color="#888888", lw=0.8)
+    ax.set_ylabel("victim bandwidth drop (%)")
+    ax.set_title("Congestion dose-response across configs")
+    ax.legend(fontsize=8)
+    ax.grid(True, axis="y", alpha=0.3)
+    fig.tight_layout()
+    fig.savefig(out_path, dpi=120)
+    plt.close(fig)
+    return out_path
+
+
 def plot_fabric(fl, out_path: str, top_n: int = 15) -> str:
     """Top-N congested switches as a horizontal bar chart, colored by role.
 
@@ -711,8 +762,8 @@ def plot_blame(br, out_path: str, top_n: int = 15) -> str:
         return ""
     kind_color = {"leaf": "#d62728", "node": "#ff7f0e", "spine": "#9467bd"}
     labels = [f"{s.name[-12:]} [{k}]" for s, k in items]
-    vals = [s.median_slowness * 100 for s, k in items]
-    colors = [kind_color[k] for s, k in items]
+    vals = [s.median_slowness * 100 for s, _ in items]
+    colors = [kind_color[k] for _, k in items]
 
     y = np.arange(len(items))
     fig, ax = plt.subplots(figsize=(8, max(3, len(items) * 0.4)))

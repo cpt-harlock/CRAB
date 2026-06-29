@@ -99,12 +99,18 @@ bursts (with barrier gaps) during the victim's run — lower time-averaged
 bisection occupancy than the rapid back-to-back alltoalls at 1–2 MB. Worth
 repeating to separate this from single-run variance.
 
-> The per-run baseline-vs-loaded diff is produced by the analyzer
-> (`congestion.{txt,json}`; the JSON is a list of comparisons, each with
-> `overall.bw_drop_pct` + `by_label` + `per_node`). The **cross-config** table
-> above is *not* a built-in output — it was assembled by reading each run's
-> `congestion.json`. `cinetic analyze compare` compares raw bandwidth across
-> runs, not congestion deltas, and has no notion of the swept parameter.
+> Reproduce the table above with the built-in cross-config view:
+> ```bash
+> cinetic analyze compare-congestion \
+>   <run_256k> <run_1m> <run_2m> <run_4m> \
+>   --label 256K/i --label 1M/i --label 2M/i --label 4M/i \
+>   --x 262144,1048576,2097152,4194304 \
+>   --topology topologies/leonardo.json --json
+> ```
+> It computes each run's victim baseline-vs-loaded drop and tabulates overall +
+> per-topology-label drop% across configs (with the `--x` trend), writing
+> `congestion_compare.{txt,json,png}` under the first run's `analysis/`. (The
+> per-run diff stays in each run's `congestion.{txt,json}`.)
 
 ## Knobs to vary next
 

@@ -266,10 +266,10 @@ def _collect_victims(exp_dirs):
     return out
 
 
-def run_congestion(exp_dirs, args) -> int:
-    """Pair victim apps in LOADED experiments with a baseline of the same
-    benchmark and report degradation. Best-effort: silently does nothing when no
-    baseline+loaded pair can be found. Returns 0 if at least one pair reported."""
+def _congestion_results(exp_dirs, args):
+    """Compute the victim CongestionResult(s) for one run's exp dirs (LOADED
+    victims paired with a same-benchmark baseline). Returns a (possibly empty)
+    list; shared by the in-run report and the cross-run comparison."""
     loaded = []
     for d in exp_dirs:
         c = context.load_context(d)
@@ -277,19 +277,19 @@ def run_congestion(exp_dirs, args) -> int:
             for app in c.victims:
                 loaded.append((d, c, app))
     if not loaded:
-        return 1
+        return []
 
     if args.baseline:
         base_dirs = _find_exp_dirs(args.baseline)
         if not base_dirs:
             print(f"[warn] --baseline {args.baseline}: no node files found",
                   file=sys.stderr)
-            return 1
+            return []
     else:
         base_dirs = [d for d in exp_dirs if context.load_context(d).is_baseline]
     baseline_victims = _collect_victims(base_dirs)
     if not baseline_victims:
-        return 1
+        return []
 
     results = []
     for (dL, cL, appL) in loaded:
@@ -308,7 +308,14 @@ def run_congestion(exp_dirs, args) -> int:
             loaded_label=f"{cL.exp_id} (app {appL.app_id}, +aggressors)",
             victim_benchmark=appL.wrapper_name)
         results.append(cr)
+    return results
 
+
+def run_congestion(exp_dirs, args) -> int:
+    """Pair victim apps in LOADED experiments with a baseline of the same
+    benchmark and report degradation. Best-effort: silently does nothing when no
+    baseline+loaded pair can be found. Returns 0 if at least one pair reported."""
+    results = _congestion_results(exp_dirs, args)
     if not results:
         return 1
 
@@ -442,6 +449,83 @@ def main_compare(argv) -> int:
     return 0
 
 
+def main_compare_congestion(argv) -> int:
+    """`cinetic analyze compare-congestion <runA> <runB> …`: the dose-response
+    view — each run's victim baseline-vs-loaded drop, tabulated across configs."""
+    ap = argparse.ArgumentParser(
+        prog="cinetic analyze compare-congestion",
+        description="Compare victim congestion across runs (dose-response).")
+    ap.add_argument("dirs", nargs="+", help="congestion run dirs (>=2)")
+    ap.add_argument("--label", action="append", default=[],
+                    help="per-config label (repeat, one per dir)")
+    ap.add_argument("--x", help="numeric x for a trend: comma-separated list "
+                    "(one per dir), e.g. message sizes")
+    ap.add_argument("--baseline", help="explicit baseline dir (else each run's "
+                    "own victim-only experiment)")
+    ap.add_argument("--topology")
+    ap.add_argument("--msg-size", type=int, dest="msg_size")
+    ap.add_argument("--window", type=int)
+    ap.add_argument("--granularity", type=int)
+    ap.add_argument("--outdir", help="default: <first dir>/analysis")
+    ap.add_argument("--json", action="store_true")
+    ap.add_argument("--no-plots", action="store_true")
+    ap.add_argument("--slow-k", type=float, default=3.0)
+    ap.add_argument("--slow-frac", type=float, default=0.7)
+    ap.add_argument("--min-nodes", type=int, default=8)
+    ap.add_argument("--expected-bw", type=float, dest="expected_bw")
+    ap.add_argument("--expected-frac", type=float, default=0.8,
+                    dest="expected_frac")
+    args = ap.parse_args(argv)
+    if len(args.dirs) < 2:
+        print("error: compare-congestion needs >= 2 dirs", file=sys.stderr)
+        return 2
+
+    xs = None
+    if args.x:
+        try:
+            xs = [float(v) for v in args.x.split(",")]
+            if len(xs) != len(args.dirs):
+                print("[warn] --x count != dirs; ignoring", file=sys.stderr)
+                xs = None
+        except ValueError:
+            print("[warn] --x not numeric; ignoring", file=sys.stderr)
+
+    items = []
+    for i, d in enumerate(args.dirs):
+        results = _congestion_results(_find_exp_dirs(d), args)
+        if not results:
+            print(f"[skip] {d}: no baseline+loaded victim pair", file=sys.stderr)
+            continue
+        label = args.label[i] if i < len(args.label) \
+            else os.path.basename(os.path.abspath(d))
+        x = xs[i] if xs else None
+        items.append((label, x, results[0]))   # the (first) victim of this run
+    if len(items) < 2:
+        print("error: fewer than 2 comparable congestion runs", file=sys.stderr)
+        return 2
+
+    cc = congestion.compare_congestion(items)
+    text = congestion.format_congestion_comparison(cc)
+    print(text)
+
+    outdir = args.outdir or os.path.join(os.path.abspath(args.dirs[0]), "analysis")
+    os.makedirs(outdir, exist_ok=True)
+    with open(os.path.join(outdir, "congestion_compare.txt"), "w") as fh:
+        fh.write(text + "\n")
+    if args.json:
+        with open(os.path.join(outdir, "congestion_compare.json"), "w") as fh:
+            json.dump(congestion.build_congestion_comparison_summary(cc), fh,
+                      indent=2)
+    if not args.no_plots:
+        try:
+            report_plot.plot_congestion_comparison(
+                cc, os.path.join(outdir, "congestion_compare.png"))
+        except Exception as exc:  # noqa: BLE001
+            print(f"[warn] congestion-compare plot failed: {exc}", file=sys.stderr)
+    print(f"\n[compare-congestion] wrote comparison to {outdir}", file=sys.stderr)
+    return 0
+
+
 def _resolve_x(spec, dirs, timestamps):
     """Turn the --x spec into per-series x values, or None if unavailable."""
     if spec == "index":
@@ -463,6 +547,8 @@ def main(argv=None) -> int:
         argv = sys.argv[1:]
     if argv and argv[0] == "compare":
         return main_compare(argv[1:])
+    if argv and argv[0] == "compare-congestion":
+        return main_compare_congestion(argv[1:])
 
     ap = argparse.ArgumentParser(
         prog="cinetic analyze", description=__doc__,

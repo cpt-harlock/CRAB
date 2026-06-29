@@ -18,7 +18,7 @@ See PLAN_ANALYSIS_REWORK.md §4.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import List, Optional
+from typing import Dict, List, Optional, Sequence, Tuple
 
 from .metrics import Analysis
 
@@ -233,4 +233,98 @@ def build_congestion_summary(cr: CongestionResult) -> dict:
                       "base_lat_s": d.base_lat, "loaded_lat_s": d.loaded_lat,
                       "lat_inc_pct": d.lat_inc_pct} for d in cr.per_node],
         "caveats": cr.caveats,
+    }
+
+
+# --------------------------------------------------------------------------- #
+# cross-config comparison (dose-response across runs)
+# --------------------------------------------------------------------------- #
+
+@dataclass
+class CongestionCompareRow:
+    label: str                          # per-config label (e.g. "1M/i")
+    x: Optional[float]                  # numeric x for a trend (else None)
+    victim_benchmark: str
+    overall_bw_drop_pct: float
+    overall_lat_inc_pct: float
+    by_label_drop: Dict[str, float] = field(default_factory=dict)  # topo label -> drop%
+    n_common_nodes: int = 0
+
+
+@dataclass
+class CongestionComparison:
+    rows: List[CongestionCompareRow] = field(default_factory=list)
+    labels_seen: List[str] = field(default_factory=list)   # ordered topo labels
+    caveats: List[str] = field(default_factory=list)
+
+
+def compare_congestion(
+        items: Sequence[Tuple[str, Optional[float], CongestionResult]]
+) -> CongestionComparison:
+    """Aggregate per-run :class:`CongestionResult`s into a cross-config table —
+    the dose-response view (victim drop% per config + per topology label)."""
+    cc = CongestionComparison(caveats=[
+        "single-run point estimates; cross-config deltas carry run-to-run "
+        "variance — repeat runs to separate signal from noise.",
+    ])
+    seen: List[str] = []
+    benches = set()
+    for label, x, cr in items:
+        by = {d.label: d.bw_drop_pct for d in cr.per_label}
+        for d in cr.per_label:
+            if d.label not in seen:
+                seen.append(d.label)
+        benches.add(cr.victim_benchmark)
+        cc.rows.append(CongestionCompareRow(
+            label=label, x=x, victim_benchmark=cr.victim_benchmark,
+            overall_bw_drop_pct=cr.overall_bw_drop_pct,
+            overall_lat_inc_pct=cr.overall_lat_inc_pct,
+            by_label_drop=by, n_common_nodes=cr.n_common_nodes))
+    cc.labels_seen = ([l for l in _LABEL_ORDER if l in seen]
+                      + [l for l in seen if l not in _LABEL_ORDER])
+    if len(benches) > 1:
+        cc.caveats.append(
+            f"runs mix victim benchmarks ({', '.join(sorted(benches))}); "
+            "drops may not be directly comparable.")
+    return cc
+
+
+def format_congestion_comparison(cc: CongestionComparison) -> str:
+    L = ["=" * 78, "CONGESTION COMPARISON (victim degradation across configs)",
+         "=" * 78]
+    benches = sorted({r.victim_benchmark for r in cc.rows if r.victim_benchmark})
+    L.append(f"configs        : {len(cc.rows)}")
+    L.append(f"victim         : {', '.join(benches) or '(unknown)'}")
+    L.append("")
+    L.append("bandwidth drop% > 0 = victim is slower under load (more congestion).")
+    L.append("")
+
+    have_x = any(r.x is not None for r in cc.rows)
+    labels = cc.labels_seen
+    head = f"  {'config':<16} {'x':>8} {'overall':>9}  " + \
+        "  ".join(f"{l[:10]:>10}" for l in labels)
+    L.append(head)
+    for r in cc.rows:
+        x = _g(r.x) if (have_x and r.x is not None) else "-"
+        cells = "  ".join(f"{_pct(r.by_label_drop.get(l, float('nan'))):>10}"
+                          for l in labels)
+        L.append(f"  {r.label:<16} {x:>8} {_pct(r.overall_bw_drop_pct):>9}  {cells}")
+    L.append("")
+    L.append("-- NOTES " + "-" * 69)
+    for c in cc.caveats:
+        L.append(f"  ! {c}")
+    L.append("=" * 78)
+    return "\n".join(L)
+
+
+def build_congestion_comparison_summary(cc: CongestionComparison) -> dict:
+    return {
+        "configs": [{"label": r.label, "x": r.x,
+                     "victim_benchmark": r.victim_benchmark,
+                     "overall_bw_drop_pct": r.overall_bw_drop_pct,
+                     "overall_lat_inc_pct": r.overall_lat_inc_pct,
+                     "by_label_drop_pct": r.by_label_drop,
+                     "n_common_nodes": r.n_common_nodes} for r in cc.rows],
+        "labels": cc.labels_seen,
+        "caveats": cc.caveats,
     }
