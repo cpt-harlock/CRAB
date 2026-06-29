@@ -17,3 +17,4 @@ experiment/analysis/
 # generated sweep configs (configs are produced on the fly)
 experiment/saturation_sweep/generated/
 experiment/congestion/generated/
+experiment/congestion/repro_paper/generated/

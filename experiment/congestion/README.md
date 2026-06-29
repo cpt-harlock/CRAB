@@ -81,9 +81,15 @@ NODE_COUNTS="64" MSG_SIZES="262144 2097152" experiment/congestion/run_sweep.sh  
 VICTIM=allgather AGGRESSOR=incast experiment/congestion/analyze_sweep.sh
 ```
 
-Each combination's runs are named `congestion_<vtag>_<atag>_n<N>_m<M>_<ts>`
-(tags: tour/agtr, a2a/inc) and its dose-response lands under
+Each combination's runs are named
+`congestion_<vtag>_<atag>_n<N>_vm<victim-msg>_am<aggr-msg>_<ts>` (tags: tour/agtr,
+a2a/inc) and its dose-response lands under
 `_sweep_analysis/congestion/congestion_<vtag>_<atag>/n<N>/`.
+
+To reproduce the De Sensi et al. Leonardo AllGather-victim experiments
+(Fig. 5 — AllToAll and Incast aggressors on the Booster partition), see
+`repro_paper/` (sweeps the *victim* vector size and reports the
+uncongested/congested runtime ratio).
 
 `analyze_sweep.sh` runs `compare-congestion` across aggressor message sizes for
 each node count, writing the dose-response table under

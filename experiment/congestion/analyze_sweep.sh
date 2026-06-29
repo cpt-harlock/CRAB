@@ -24,7 +24,7 @@ OUT="data/leonardo/_sweep_analysis/congestion/${PFX}"
 for N in $NODE_COUNTS; do
   dirs=(); xs=()
   for M in $MSG_SIZES; do
-    d="$(ls -dt data/leonardo/${PFX}_n${N}_m${M}_* 2>/dev/null | head -1 || true)"
+    d="$(ls -dt data/leonardo/${PFX}_n${N}_*_am${M}_* 2>/dev/null | head -1 || true)"
     [ -z "$d" ] && continue
     echo "=== per-run: ${N} nodes, aggr msg ${M} ($d) ==="
     cinetic analyze "$d" --topology "$TOPO" --fabric --json >/dev/null 2>&1
