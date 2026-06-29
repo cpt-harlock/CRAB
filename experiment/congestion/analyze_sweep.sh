@@ -8,16 +8,23 @@ set -uo pipefail
 
 NODE_COUNTS="${NODE_COUNTS:-4 8 16 32 64 128 256 512 1024}"
 MSG_SIZES="${MSG_SIZES:-8 64 512 4096 32768 262144 2097152 16777216}"
+VICTIM="${VICTIM:-tournament}"
+AGGRESSOR="${AGGRESSOR:-alltoall}"
 TOPO="topologies/leonardo.json"
+
+# run-dir prefix tags must match gen_config.py's name (congestion_<vtag>_<atag>_...)
+declare -A VTAG=( [tournament]=tour [allgather]=agtr )
+declare -A ATAG=( [alltoall]=a2a [incast]=inc )
+PFX="congestion_${VTAG[$VICTIM]}_${ATAG[$AGGRESSOR]}"
 
 REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$REPO_ROOT"
-OUT="data/leonardo/_sweep_analysis/congestion"
+OUT="data/leonardo/_sweep_analysis/congestion/${PFX}"
 
 for N in $NODE_COUNTS; do
   dirs=(); xs=()
   for M in $MSG_SIZES; do
-    d="$(ls -dt data/leonardo/congestion_a2a_n${N}_m${M}_* 2>/dev/null | head -1 || true)"
+    d="$(ls -dt data/leonardo/${PFX}_n${N}_m${M}_* 2>/dev/null | head -1 || true)"
     [ -z "$d" ] && continue
     echo "=== per-run: ${N} nodes, aggr msg ${M} ($d) ==="
     cinetic analyze "$d" --topology "$TOPO" --fabric --json >/dev/null 2>&1

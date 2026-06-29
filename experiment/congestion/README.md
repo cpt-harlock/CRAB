@@ -60,12 +60,30 @@ Axes (override via env vars):
 - `NODE_COUNTS="4 8 16 32 64 128 256 512 1024"` — powers of two ≥4 (split 50:50,
   so N/2 must be an even, tournament-valid rank count).
 - `MSG_SIZES="8 64 512 4096 32768 262144 2097152 16777216"` (8 B → 16 MB, ×8).
+- `VICTIM=tournament|allgather`, `AGGRESSOR=alltoall|incast` (defaults
+  tournament/alltoall).
+
+**Victim/aggressor combinations.** The victim is the measured benchmark; the
+aggressor is the killable (`end="f"`) noise generator:
+- victims: `tournament` (all-pairs bandwidth, pairwise) | `allgather`
+  (`agtr_comm_only`, ring, directed — per-link bandwidth).
+- aggressors: `alltoall` (`a2a_nb`, bisection stress) | `incast` (`inc_nb`, all
+  ranks → one receiver — a hotspot at that node's leaf, a different congestion
+  shape than bisection). Both run `-endl` and stop gracefully on the engine's
+  SIGUSR1 (so the kill is prompt; see the graceful-stop note in CLAUDE.md).
 
 ```bash
-experiment/congestion/run_sweep.sh                 # full grid (9×8 = 72 jobs)
-NODE_COUNTS="64" MSG_SIZES="262144 2097152" experiment/congestion/run_sweep.sh  # subset
-experiment/congestion/analyze_sweep.sh             # per-run + dose-response
+experiment/congestion/run_sweep.sh                 # default tournament vs alltoall
+# allgather victim + incast aggressor:
+VICTIM=allgather AGGRESSOR=incast experiment/congestion/run_sweep.sh
+NODE_COUNTS="64" MSG_SIZES="262144 2097152" experiment/congestion/run_sweep.sh   # subset
+# analyze with the SAME VICTIM/AGGRESSOR so it finds the matching runs:
+VICTIM=allgather AGGRESSOR=incast experiment/congestion/analyze_sweep.sh
 ```
+
+Each combination's runs are named `congestion_<vtag>_<atag>_n<N>_m<M>_<ts>`
+(tags: tour/agtr, a2a/inc) and its dose-response lands under
+`_sweep_analysis/congestion/congestion_<vtag>_<atag>/n<N>/`.
 
 `analyze_sweep.sh` runs `compare-congestion` across aggressor message sizes for
 each node count, writing the dose-response table under

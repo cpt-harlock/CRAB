@@ -8,10 +8,14 @@
 #   NODE_COUNTS : powers of two >= 4 (split 50:50 -> N/2 must be an even rank
 #                 count for the tournament victim).
 #   MSG_SIZES   : aggressor message size, 8 B .. 16 MB, x8 each step.
+#   VICTIM      : tournament (default) | allgather
+#   AGGRESSOR   : alltoall   (default) | incast   (all -> one receiver)
 set -euo pipefail
 
 NODE_COUNTS="${NODE_COUNTS:-4 8 16 32 64 128 256 512 1024}"
 MSG_SIZES="${MSG_SIZES:-8 64 512 4096 32768 262144 2097152 16777216}"
+VICTIM="${VICTIM:-tournament}"
+AGGRESSOR="${AGGRESSOR:-alltoall}"
 PRESET="leonardo"
 
 REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
@@ -23,16 +27,17 @@ mkdir -p "$GEN"
 n=0
 for N in $NODE_COUNTS; do
   for M in $MSG_SIZES; do
-    cfg="$GEN/congestion_n${N}_m${M}.json"
-    python "$HERE/gen_config.py" --nodes "$N" --aggr-msgsize "$M" -o "$cfg" >/dev/null
-    echo "=== submitting congestion: ${N} nodes, aggressor msg ${M} B ==="
+    cfg="$GEN/congestion_${VICTIM}_${AGGRESSOR}_n${N}_m${M}.json"
+    python "$HERE/gen_config.py" --nodes "$N" --aggr-msgsize "$M" \
+      --victim "$VICTIM" --aggressor "$AGGRESSOR" -o "$cfg" >/dev/null
+    echo "=== submitting congestion ($VICTIM vs $AGGRESSOR): ${N} nodes, aggr msg ${M} B ==="
     cinetic run -p "$PRESET" -c "$cfg"
     n=$((n + 1))
   done
 done
 
 echo
-echo "Submitted $n job(s) over nodes={$NODE_COUNTS} x aggr-msg={$MSG_SIZES}."
+echo "Submitted $n job(s): $VICTIM vs $AGGRESSOR over nodes={$NODE_COUNTS} x aggr-msg={$MSG_SIZES}."
 echo "Results: data/leonardo/congestion_a2a_n<N>_m<M>_<timestamp>/  (baseline/+loaded/)"
 echo "Analyze with: $HERE/analyze_sweep.sh"
 echo

@@ -9,6 +9,7 @@
 #include <stdbool.h>
 #include <sched.h>
 #include "common.h"
+#include "results.h"
 
 int main(int argc, char** argv){
 
@@ -16,9 +17,11 @@ int main(int argc, char** argv){
     MPI_Init(&argc,&argv);
     MPI_Comm_size(MPI_COMM_WORLD, &w_size);
     MPI_Comm_rank(MPI_COMM_WORLD, &my_rank);
-    
-    /*register signal handler*/
-    signal(SIGUSR1,sig_handler); //or SIGUSR1 here
+
+    /*graceful stop: SIGUSR1 sets a flag, the endless loop breaks collectively
+      (cin_should_stop) so this incast aggressor stops promptly when the engine
+      ends it, instead of relying on the old write_results-on-signal path.*/
+    cin_install_stop_handler();
 
     /*default values*/
     int master_rank=0;
@@ -187,7 +190,7 @@ int main(int argc, char** argv){
                 dsleep(burst_pause);
             }
         }
-    }while(endless);
+    }while(endless && !cin_should_stop(MPI_COMM_WORLD));
 
     /*write results to file*/
     MPI_Barrier(MPI_COMM_WORLD);
