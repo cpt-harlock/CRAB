@@ -37,6 +37,25 @@ NODE_COUNTS="2 4 8" MSG_SIZES="4096 262144" experiment/saturation_sweep/run_swee
 experiment/saturation_sweep/analyze_sweep.sh
 ```
 
+### Scheduler & launch knobs (shared across all experiment runners)
+
+Every runner under `experiment/` sources `experiment/lib/launch.sh`, so the same
+env knobs work here, in the congestion sweep, and in the paper repro:
+
+| knob | effect |
+|---|---|
+| `PRESET` | cinetic preset (default `leonardo`) |
+| `PARTITION` / `ACCOUNT` / `QOS` / `GRES` / `RESERVATION` | the matching `#SBATCH` directive (baked into each generated config) |
+| `EXTRA_SBATCH="--flag=v …"` | arbitrary extra `#SBATCH` directives |
+| `NO_AUTO_QOS=1` | skip `gen_config`'s automatic DCGP big-QOS (use when targeting Booster) |
+| `CHAIN=1` | serialize the grid (`--dependency=afterany:<prev>`) so only one job runs at a time |
+
+```bash
+# e.g. run the sweep on Booster, serialized, inside a maintenance window:
+PARTITION=boost_usr_prod NO_AUTO_QOS=1 CHAIN=1 RESERVATION=maint_3006_boost \
+  NODE_COUNTS="2 4 8" experiment/saturation_sweep/run_sweep.sh
+```
+
 Per-run results land under `data/leonardo/tournament_sat_n<N>_m<M>_<timestamp>/`.
 The per-message-size scaling curves (overall/by-locality bandwidth vs node count,
 with a trend) are written under

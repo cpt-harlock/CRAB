@@ -81,6 +81,14 @@ NODE_COUNTS="64" MSG_SIZES="262144 2097152" experiment/congestion/run_sweep.sh  
 VICTIM=allgather AGGRESSOR=incast experiment/congestion/analyze_sweep.sh
 ```
 
+**Scheduler & launch knobs (shared).** Every runner under `experiment/` sources
+`experiment/lib/launch.sh`, so the same env knobs apply here and in the
+saturation sweep / paper repro: `PRESET`, `PARTITION`, `ACCOUNT`, `QOS`, `GRES`,
+`RESERVATION`, `EXTRA_SBATCH="--flag=v …"`, `NO_AUTO_QOS=1` (skip the auto DCGP
+big-QOS — for Booster), and `CHAIN=1` (serialize the grid via
+`--dependency=afterany:<prev>` so no two jobs co-run and manufacture false
+congestion). E.g. `CHAIN=1 NODE_COUNTS="64" experiment/congestion/run_sweep.sh`.
+
 Each combination's runs are named
 `congestion_<vtag>_<atag>_n<N>_vm<victim-msg>_am<aggr-msg>_<ts>` (tags: tour/agtr,
 a2a/inc) and its dose-response lands under

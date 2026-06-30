@@ -10,35 +10,36 @@
 #   MSG_SIZES   : aggressor message size, 8 B .. 16 MB, x8 each step.
 #   VICTIM      : tournament (default) | allgather
 #   AGGRESSOR   : alltoall   (default) | incast   (all -> one receiver)
-set -euo pipefail
+# Scheduler knobs (PARTITION/ACCOUNT/QOS/GRES/RESERVATION/EXTRA_SBATCH/
+# NO_AUTO_QOS/CHAIN/PRESET) come from the shared launcher — see experiment/lib/launch.sh.
+set -uo pipefail
 
 NODE_COUNTS="${NODE_COUNTS:-4 8 16 32 64 128 256 512 1024}"
 MSG_SIZES="${MSG_SIZES:-8 64 512 4096 32768 262144 2097152 16777216}"
 VICTIM="${VICTIM:-tournament}"
 AGGRESSOR="${AGGRESSOR:-alltoall}"
-PRESET="leonardo"
 
 REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$REPO_ROOT"
+source experiment/lib/launch.sh
 HERE="experiment/congestion"
 GEN="$HERE/generated"
 mkdir -p "$GEN"
 
-n=0
 for N in $NODE_COUNTS; do
   for M in $MSG_SIZES; do
     cfg="$GEN/congestion_${VICTIM}_${AGGRESSOR}_n${N}_m${M}.json"
-    python "$HERE/gen_config.py" --nodes "$N" --aggr-msgsize "$M" \
-      --victim "$VICTIM" --aggressor "$AGGRESSOR" -o "$cfg" >/dev/null
-    echo "=== submitting congestion ($VICTIM vs $AGGRESSOR): ${N} nodes, aggr msg ${M} B ==="
-    cinetic run -p "$PRESET" -c "$cfg"
-    n=$((n + 1))
+    launch_dep_args
+    if python "$HERE/gen_config.py" --nodes "$N" --aggr-msgsize "$M" \
+         --victim "$VICTIM" --aggressor "$AGGRESSOR" \
+         "${LAUNCH_GEN_ARGS[@]}" "${LAUNCH_DEP_ARGS[@]}" -o "$cfg" >/dev/null; then
+      launch_submit "$cfg" "congestion ($VICTIM vs $AGGRESSOR): ${N} nodes, aggr msg ${M} B"
+    fi
   done
 done
 
-echo
-echo "Submitted $n job(s): $VICTIM vs $AGGRESSOR over nodes={$NODE_COUNTS} x aggr-msg={$MSG_SIZES}."
-echo "Results: data/leonardo/congestion_a2a_n<N>_m<M>_<timestamp>/  (baseline/+loaded/)"
+launch_footer
+echo "Results: data/leonardo/congestion_*_n<N>_*_am<M>_<timestamp>/  (baseline/+loaded/)"
 echo "Analyze with: $HERE/analyze_sweep.sh"
 echo
 echo "NB: small node counts (<32) sit on a single non-blocking leaf -> ~0% drop"
