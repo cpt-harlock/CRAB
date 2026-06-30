@@ -31,20 +31,20 @@
 
 PRESET="${PRESET:-leonardo}"
 
-# --- Site defaults: Leonardo *Booster*, inside the current maintenance window.
-#     Override any of these from the environment. !! RESERVATION is a TIME-LIMITED
-#     maintenance reservation: once it expires, update it (get the live name from
-#     `scontrol show reservation`) or clear it with RESERVATION= , otherwise every
-#     job pends `ReqNodeNotAvail, Reserved for maintenance` (or is rejected). To
-#     run on DCGP instead: PARTITION=dcgp_usr_prod QOS= RESERVATION= NO_AUTO_QOS=0.
+# --- Site defaults: Leonardo *Booster*, default QOS, no reservation. Override any
+#     from the environment. For a maintenance session, set the live values, e.g.
+#       QOS=qos_special RESERVATION=maint_XXXX_boost
+#     (get the reservation name from `scontrol show reservation`; both are usually
+#     time-limited and disappear when the window ends). To run on DCGP instead:
+#       PARTITION=dcgp_usr_prod NO_AUTO_QOS=0
 # NB: PARTITION/QOS/RESERVATION use ${VAR-default} (no colon) so an explicit empty
 # value (e.g. QOS=) CLEARS the default rather than re-substituting it.
 PARTITION="${PARTITION-boost_usr_prod}"
 ACCOUNT="${ACCOUNT:-}"
-QOS="${QOS-qos_special}"
+QOS="${QOS-}"
 GRES="${GRES:-}"
-RESERVATION="${RESERVATION-maint_3006_boost}"
-NO_AUTO_QOS="${NO_AUTO_QOS:-1}"   # QOS is set above, so don't also auto-add the DCGP big-QOS (would clash)
+RESERVATION="${RESERVATION-}"
+NO_AUTO_QOS="${NO_AUTO_QOS:-1}"   # Booster default: don't auto-add the DCGP big-QOS
 EXTRA_SBATCH="${EXTRA_SBATCH:-}"
 CHAIN="${CHAIN:-0}"
 
