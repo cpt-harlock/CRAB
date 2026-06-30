@@ -16,7 +16,7 @@ set -uo pipefail
 CONFIG="${1:-experiment/congestion/configs/congestion_a2a_n16.json}"
 
 REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
-cd "$REPO_ROOT"
+cd "$REPO_ROOT" || exit 1
 source experiment/lib/launch.sh
 
 launch_submit "$CONFIG" "congestion ($CONFIG)"

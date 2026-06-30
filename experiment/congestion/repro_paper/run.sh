@@ -37,7 +37,7 @@ GRES="${GRES:-tmpfs:0}"
 NO_AUTO_QOS="${NO_AUTO_QOS:-1}"   # Booster: don't auto-add the DCGP big-QOS
 
 REPO_ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
-cd "$REPO_ROOT"
+cd "$REPO_ROOT" || exit 1
 source experiment/lib/launch.sh
 GEN="experiment/congestion/repro_paper/generated"; mkdir -p "$GEN"
 
