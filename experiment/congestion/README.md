@@ -19,6 +19,14 @@ CINETIC exists for.
   (victim only; partition-1 nodes idle) and `loaded` (victim + aggressor). They
   run sequentially on the same allocation, so the victim runs on the **same 8
   nodes** in both phases → a clean per-node congestion diff.
+- **Aggressor leads** (loaded experiment): the aggressor starts at `t=0` and the
+  victim is delayed by `--aggr-lead` seconds (default 10), so the victim measures
+  against an already-saturated fabric instead of the aggressor's ramp-up. The
+  baseline victim is undelayed, so the diff stays clean. The engine kills the
+  endless aggressor when the victim finishes.
+- **Node assignment recorded**: each experiment dir gets a
+  `partition_assignment.json` (partition → nodes, and app id → role → nodes),
+  the only on-disk record of the `collect:false` aggressor's nodes.
 
 Configs:
 - `congestion_a2a_n16.json`: 16 nodes → 8 victim + 8 aggressor. Default DCGP QOS.

@@ -33,7 +33,7 @@
           "path": "tournament_nb.py",
           "args": "-msgsize 4194304 -window 64 -maxsamples 4000",
           "collect": true,
-          "start": "0",
+          "start": "10",
           "end": "",
           "partition": 0
         },

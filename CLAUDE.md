@@ -225,6 +225,11 @@ Results land under `data/<CINETIC_SYSTEM>/<name>_<timestamp>/`:
 - `slurm_output.log`, `slurm_error.log`
 - `<exp_id>/data_app_<id>.csv` — collected metrics (wrapper-parsed stdout)
 - `<exp_id>/error_app_<id>.log` — per-app error logs on non-zero exit
+- `<exp_id>/partition_assignment.json` — resolved node assignment for that
+  experiment: `partitions` (partition id → nodes) and `apps` (each app's id,
+  role, partition, collect flag, node list). Written at allocation time, so it
+  records the nodes of **every** app — including a `collect:false` aggressor that
+  emits no per-node CSVs. `slurm_job_id.txt` (top level) holds the Slurm job id.
 
 ### Standardized per-node output
 

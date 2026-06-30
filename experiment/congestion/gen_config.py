@@ -6,6 +6,10 @@ allocation, so the victim runs on the same nodes in both. N splits into N/2
 victim + N/2 aggressor — needs N a multiple of 4 (so N/2 is an even,
 tournament-valid rank count).
 
+In the loaded experiment the aggressor LEADS: it starts at t=0 and the victim is
+delayed by --aggr-lead seconds, so the victim measures against an already-
+congested fabric rather than the aggressor's ramp-up.
+
 Victim/aggressor are selectable (--victim / --aggressor):
   victims    : tournament (all-pairs bandwidth) | allgather (ring, directed)
   aggressors : alltoall (bisection stress)      | incast (all -> one receiver)
@@ -46,6 +50,12 @@ def main() -> None:
     p.add_argument("--aggressor", choices=list(AGGRESSORS), default="alltoall")
     p.add_argument("--iters", type=int, default=10)
     p.add_argument("--warmup", type=int, default=0)
+    p.add_argument("--aggr-lead", type=int, default=10,
+                   help="seconds the aggressor leads the victim in the loaded "
+                        "experiment: the aggressor starts at t=0 and the victim "
+                        "is delayed by this much, so the fabric is already "
+                        "congested when the victim's measurement begins (0=both "
+                        "start together)")
     p.add_argument("--walltime", default="00:30:00")
     p.add_argument("--timeout", default="1500.0")
     p.add_argument("--qos-min-nodes", type=int, default=32)
@@ -91,11 +101,18 @@ def main() -> None:
         "args": atmpl.format(amsg=a.aggr_msgsize),
         "collect": False, "start": "0", "end": "f", "partition": 1,
     }
+    # Loaded experiment: aggressor leads. It starts at t=0; the victim is delayed
+    # by aggr-lead so it measures against an already-saturated fabric (not the
+    # aggressor's ramp-up). Baseline victim is undelayed (no aggressor to wait
+    # for), so its measurement is unchanged -> the baseline-vs-loaded diff stays
+    # clean. The engine still kills the endless aggressor when the victim ends.
+    loaded_victim = dict(victim)
+    loaded_victim["start"] = str(a.aggr_lead)
     cfg = {
         "global_options": go,
         "experiments": {
             "baseline": {"apps": {"0": dict(victim)}},
-            "loaded": {"apps": {"0": dict(victim), "1": aggressor}},
+            "loaded": {"apps": {"0": loaded_victim, "1": aggressor}},
         },
     }
     with open(a.out, "w") as fh:

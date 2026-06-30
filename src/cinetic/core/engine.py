@@ -371,6 +371,50 @@ class ExperimentRunner:
         self.data_containers = []
         self.ppn = int(global_options.get('ppn', 1))
 
+    def _dump_node_assignment(self):
+        """Write partition_assignment.json into the experiment dir: per-app id,
+        role, partition and node list, plus a partition->nodes summary. Lets a
+        run be reconstructed (which nodes ran which app) without parsing the
+        Slurm log — including for collect:false apps that emit no per-node CSVs.
+        """
+        def role_of(end: str) -> str:
+            return {"": "victim", "f": "aggressor"}.get(end, "timed" if end else "victim")
+
+        apps_out = []
+        partitions: Dict[int, List[str]] = {}
+        for app in self.apps:
+            nodes = list(getattr(app, "node_list", []) or [])
+            pid = int(getattr(app, "partition_id", 0))
+            apps_out.append({
+                "app_id": app.id_num,
+                "role": role_of(getattr(app, "config_end", "")),
+                "end": getattr(app, "config_end", ""),
+                "partition": pid,
+                "collect": bool(getattr(app, "collect_flag", False)),
+                "num_nodes": len(nodes),
+                "nodes": nodes,
+            })
+            seen = partitions.setdefault(pid, [])
+            for n in nodes:
+                if n not in seen:
+                    seen.append(n)
+
+        payload = {
+            "experiment": self.name,
+            "allocationmode": self.global_opts.get("allocationmode", "l"),
+            "partitionsplit": self.global_opts.get("partitionsplit"),
+            "partitionlayout": self.global_opts.get("partitionlayout"),
+            "partitions": {str(k): v for k, v in sorted(partitions.items())},
+            "apps": apps_out,
+        }
+        path = os.path.join(self.exp_dir, "partition_assignment.json")
+        try:
+            with open(path, "w") as f:
+                json.dump(payload, f, indent=2)
+            self.log(f"[{self.name}] node assignment -> {path}")
+        except OSError as e:
+            self.log(f"[{self.name}] WARN: could not write {path}: {e}")
+
     def setup(self):
         """Loads apps, workload manager, and calculates node layout."""
         self.log(f"[{self.name}] Setting up...")
@@ -456,6 +500,11 @@ class ExperimentRunner:
         else: # linear
             split = NodeAllocator.get_abs_split(alloc_options.get('allocationsplit', 'e'), len(self.apps), len(self.node_list))
             NodeAllocator.allocate_linear(self.apps, self.node_list, split)
+
+        # 2b. Persist the resolved node assignment. Only collecting apps emit
+        # per-node CSVs, so this is the single record of a collect:false
+        # aggressor's nodes (otherwise only recoverable from the Slurm log).
+        self._dump_node_assignment()
 
         # 3. Initialize Data Containers
         for app in self.apps:
