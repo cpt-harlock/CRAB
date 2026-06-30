@@ -1,5 +1,6 @@
 import subprocess
 import signal
+import re
 import numpy as np
 import scipy.stats as st
 import math
@@ -900,6 +901,14 @@ class Engine:
                 self.log(out)
             raise RuntimeError("sbatch submission failed — see the log above.")
         self.log(result.stdout.strip())
+
+        # Persist the Slurm job id into the run dir so a result directory can be
+        # mapped back to its job (check status, cancel, debug a chain). sbatch
+        # prints "Submitted batch job <N>"; tolerate any other format silently.
+        m = re.search(r"Submitted batch job (\d+)", result.stdout or "")
+        if m:
+            with open(os.path.join(data_directory, 'slurm_job_id.txt'), 'w') as f:
+                f.write(m.group(1) + "\n")
 
     def _run_worker(self, config: Dict[str, Any], environment: Dict[str, Any], output_dir: str):
         self.log("--- [WORKER] Started ---")
