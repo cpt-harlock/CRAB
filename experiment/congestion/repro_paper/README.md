@@ -26,10 +26,13 @@ Sensi), specifically **Figure 5 (center column)** — steady congestion, ring
   the aggressor as fixed background noise without stating its size. Default
   `AGGR_MSG=1048576` (1 MiB, which maximised contention in our own DCGP
   dose-response). Override to taste.
-- **Booster account / QOS** — site-specific. Defaults: `PARTITION=boost_usr_prod`,
-  `GRES=tmpfs:0`, **no account and no QOS** (the ISCRA allocation expired, so the
-  job uses the user's default account / default QOS). Set `ACCOUNT=…` / `QOS=…`
-  to add them (large allocations may need a production QOS).
+- **Booster account / QOS** — site-specific. The shared `experiment/lib/launch.sh`
+  site defaults apply: `PARTITION=boost_usr_prod`, `QOS=qos_special`,
+  `RESERVATION=maint_3006_boost`, `NO_AUTO_QOS=1` (this runner also sets
+  `GRES=tmpfs:0`). No account is set (default account). The reservation is a
+  time-limited maintenance window — update it once it expires (or `RESERVATION=`
+  to clear). The 128/256-node tier needs the big-production QOS instead:
+  `QOS=boost_qos_bprod GRES=gpu:4 EXTRA_SBATCH="--cpus-per-task=32"`.
 
 ## Run
 

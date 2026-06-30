@@ -1,6 +1,6 @@
 #!/bin/bash
-# Congestion experiment (Leonardo DCGP): a tournament_nb victim measured with and
-# without a co-running alltoall aggressor sharing the same cells.
+# Congestion experiment: a tournament_nb victim measured with and without a
+# co-running alltoall aggressor sharing the same cells.
 #
 # A single `cinetic run` submits ONE Slurm job containing BOTH experiments
 # (baseline = victim only, loaded = victim + aggressor). They run sequentially on

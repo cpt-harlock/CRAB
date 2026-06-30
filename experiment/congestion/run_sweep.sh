@@ -1,5 +1,6 @@
 #!/bin/bash
-# Congestion sweep — 2D: node count x aggressor message size (Leonardo DCGP).
+# Congestion sweep — 2D: node count x aggressor message size (Leonardo Booster by
+# default; partition/QOS/reservation set in experiment/lib/launch.sh).
 # victim = tournament_nb (fixed saturating size); aggressor = a2a_nb -endl at the
 # swept message size. One Slurm job per cell (baseline + loaded in each), configs
 # generated on the fly into generated/ (gitignored).

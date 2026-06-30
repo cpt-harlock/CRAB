@@ -9,11 +9,10 @@
 # 50:50 interleaved victim/aggressor, aggressor in an endless loop. Metric is the
 # ratio uncongested/congested victim runtime (computed by analyze.sh).
 #
-# Paper system = Leonardo *Booster* (HDR IB, Dragonfly+), so this runner DEFAULTS
-# the shared scheduler knobs to Booster (boost_usr_prod, no auto DCGP QOS) before
-# sourcing experiment/lib/launch.sh. All those knobs
-# (PARTITION/ACCOUNT/QOS/GRES/RESERVATION/EXTRA_SBATCH/NO_AUTO_QOS/CHAIN/PRESET)
-# still override from the environment — e.g. the 128/256-node tier needs
+# Paper system = Leonardo *Booster* (HDR IB, Dragonfly+) — which is the site
+# default in experiment/lib/launch.sh (partition/QOS/reservation + NO_AUTO_QOS).
+# All knobs (PARTITION/ACCOUNT/QOS/GRES/RESERVATION/EXTRA_SBATCH/NO_AUTO_QOS/
+# CHAIN/PRESET) override from the environment — e.g. the 128/256-node tier needs
 #   QOS=boost_qos_bprod GRES=gpu:4 EXTRA_SBATCH="--cpus-per-task=32"
 # and CHAIN=1 serializes the grid (no cross-job false congestion).
 set -uo pipefail
@@ -30,11 +29,9 @@ WALLTIME="${WALLTIME:-00:30:00}"
 #     dose-response on DCGP.
 AGGR_MSG="${AGGR_MSG:-1048576}"
 
-# --- Booster defaults for the shared scheduler knobs (env still overrides) ----
-# ACCOUNT/QOS default empty (ISCRA expired) -> default account + default QOS.
-PARTITION="${PARTITION:-boost_usr_prod}"
+# --- repro-specific default (env still overrides). The Booster partition/QOS/
+#     reservation + NO_AUTO_QOS come from experiment/lib/launch.sh's site defaults.
 GRES="${GRES:-tmpfs:0}"
-NO_AUTO_QOS="${NO_AUTO_QOS:-1}"   # Booster: don't auto-add the DCGP big-QOS
 
 REPO_ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 cd "$REPO_ROOT" || exit 1

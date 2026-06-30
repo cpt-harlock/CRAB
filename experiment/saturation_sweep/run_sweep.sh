@@ -1,7 +1,8 @@
 #!/bin/bash
-# Tournament bandwidth saturation sweep — 2D: node count x message size
-# (Leonardo DCGP). One Slurm job per (nodes, msgsize) cell, submitted via the
-# cinetic CLI; configs are generated on the fly into generated/ (gitignored).
+# Tournament bandwidth saturation sweep — 2D: node count x message size.
+# One Slurm job per (nodes, msgsize) cell, submitted via the cinetic CLI; configs
+# are generated on the fly into generated/ (gitignored). Targets Leonardo Booster
+# by default (partition/QOS/reservation set in experiment/lib/launch.sh).
 #
 # Axes (edit to run a subset):
 #   NODE_COUNTS : powers of two, tournament needs an even rank count.

@@ -40,7 +40,12 @@ experiment/saturation_sweep/analyze_sweep.sh
 ### Scheduler & launch knobs (shared across all experiment runners)
 
 Every runner under `experiment/` sources `experiment/lib/launch.sh`, so the same
-env knobs work here, in the congestion sweep, and in the paper repro:
+env knobs work here, in the congestion sweep, and in the paper repro. **The site
+defaults target Leonardo Booster**: `PARTITION=boost_usr_prod`, `QOS=qos_special`,
+`RESERVATION=maint_3006_boost`, `NO_AUTO_QOS=1`. The reservation is a
+time-limited maintenance window — update it (or clear with `RESERVATION=`) once
+it expires. To run on DCGP instead:
+`PARTITION=dcgp_usr_prod QOS= RESERVATION= NO_AUTO_QOS=0`.
 
 | knob | effect |
 |---|---|

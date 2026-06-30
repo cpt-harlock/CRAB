@@ -88,6 +88,11 @@ saturation sweep / paper repro: `PRESET`, `PARTITION`, `ACCOUNT`, `QOS`, `GRES`,
 big-QOS — for Booster), and `CHAIN=1` (serialize the grid via
 `--dependency=afterany:<prev>` so no two jobs co-run and manufacture false
 congestion). E.g. `CHAIN=1 NODE_COUNTS="64" experiment/congestion/run_sweep.sh`.
+The **site defaults** (in `launch.sh`) target Leonardo Booster:
+`PARTITION=boost_usr_prod QOS=qos_special RESERVATION=maint_3006_boost
+NO_AUTO_QOS=1` — the reservation is a time-limited maintenance window, so update
+it once it expires (or `RESERVATION=` to clear). DCGP:
+`PARTITION=dcgp_usr_prod QOS= RESERVATION= NO_AUTO_QOS=0`.
 
 Each combination's runs are named
 `congestion_<vtag>_<atag>_n<N>_vm<victim-msg>_am<aggr-msg>_<ts>` (tags: tour/agtr,
