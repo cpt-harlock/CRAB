@@ -32,29 +32,45 @@ PARTITION="${PARTITION:-boost_usr_prod}"
 ACCOUNT="${ACCOUNT:-}"
 GRES="${GRES:-tmpfs:0}"
 QOS="${QOS:-}"
+RESERVATION="${RESERVATION:-}"   # e.g. maint_3006_boost to run inside a maintenance window
+EXTRA_SBATCH="${EXTRA_SBATCH:-}" # space-separated extra #SBATCH directives, e.g.
+                                 # "--cpus-per-task=32" (the 128/256-node tier needs it)
 PRESET="leonardo"
+
+# --- CHAIN=1: serialize the whole grid so no two jobs run at once (avoids
+#     cross-job "false congestion"). Each job depends on the previous one via
+#     --dependency=afterany:<prev> (fires when prev terminates in ANY state, so
+#     one failure won't wedge the rest). Submission order = the loop order below.
+CHAIN="${CHAIN:-0}"
 
 REPO_ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 cd "$REPO_ROOT"
 GEN="experiment/congestion/repro_paper/generated"; mkdir -p "$GEN"
 
 sbatch_args=(--no-auto-qos --sbatch="--partition=$PARTITION")
-[ -n "$GRES" ]    && sbatch_args+=(--sbatch="--gres=$GRES")
-[ -n "$ACCOUNT" ] && sbatch_args+=(--sbatch="--account=$ACCOUNT")
-[ -n "$QOS" ]     && sbatch_args+=(--sbatch="--qos=$QOS")
+[ -n "$GRES" ]        && sbatch_args+=(--sbatch="--gres=$GRES")
+[ -n "$ACCOUNT" ]     && sbatch_args+=(--sbatch="--account=$ACCOUNT")
+[ -n "$QOS" ]         && sbatch_args+=(--sbatch="--qos=$QOS")
+[ -n "$RESERVATION" ] && sbatch_args+=(--sbatch="--reservation=$RESERVATION")
+for d in $EXTRA_SBATCH; do sbatch_args+=(--sbatch="$d"); done
 
 n=0
+prev=""   # last submitted job id, for the CHAIN dependency
 for AGG in $AGGRESSORS; do
   for N in $NODE_COUNTS; do
     for VM in $VICTIM_MSG_SIZES; do
       cfg="$GEN/repro_agtr_${AGG}_n${N}_vm${VM}.json"
+      dep_args=()
+      [ "$CHAIN" = 1 ] && [ -n "$prev" ] && dep_args+=(--sbatch="--dependency=afterany:$prev")
       python experiment/congestion/gen_config.py \
         --victim allgather --aggressor "$AGG" --nodes "$N" \
         --victim-msgsize "$VM" --aggr-msgsize "$AGGR_MSG" \
         --iters "$ITERS" --warmup "$WARMUP" --walltime "$WALLTIME" \
-        "${sbatch_args[@]}" -o "$cfg" >/dev/null
-      echo "=== submit: allgather vs $AGG | ${N} nodes | victim vec ${VM} B ==="
-      cinetic run -p "$PRESET" -c "$cfg"
+        "${sbatch_args[@]}" "${dep_args[@]}" -o "$cfg" >/dev/null
+      echo "=== submit: allgather vs $AGG | ${N} nodes | victim vec ${VM} B${prev:+  (after $prev)} ==="
+      out="$(cinetic run -p "$PRESET" -c "$cfg")"; echo "$out"
+      jid="$(echo "$out" | grep -oE 'Submitted batch job [0-9]+' | grep -oE '[0-9]+' | tail -1)"
+      [ "$CHAIN" = 1 ] && prev="$jid"
       n=$((n + 1))
     done
   done

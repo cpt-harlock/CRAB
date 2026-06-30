@@ -50,6 +50,41 @@ AGGRESSORS="incast" experiment/congestion/repro_paper/run.sh
 experiment/congestion/repro_paper/analyze.sh
 ```
 
+### Serializing the grid (avoid cross-job "false congestion")
+
+`CHAIN=1` makes every job depend on the previous one
+(`--dependency=afterany:<prev>`), so **only one job runs at a time** — no two
+co-runs share the fabric and inflate each other's congestion. `afterany` fires
+when the prior job terminates in *any* state, so one failure won't wedge the
+rest. Total wall time becomes the sum of the cells, so pair it with a subset.
+
+```bash
+CHAIN=1 experiment/congestion/repro_paper/run.sh
+```
+
+### Node-count tiers (QOS) and maintenance windows
+
+The Booster **partition caps the default (`normal`) QOS at 64 nodes**, so the two
+tiers need different directives:
+
+```bash
+# <=64 nodes: default QOS, no GPUs needed
+NODE_COUNTS="16 32 64" experiment/congestion/repro_paper/run.sh
+
+# 128 / 256 nodes: needs the big-production QOS, which in turn requires whole
+# nodes (32 cores, QOSMinCpu) AND GPUs (QOSMinGRES) — all granted by the default
+# cin_staff account, no ISCRA needed:
+QOS=boost_qos_bprod GRES=gpu:4 EXTRA_SBATCH="--cpus-per-task=32" \
+  NODE_COUNTS="128 256" experiment/congestion/repro_paper/run.sh
+```
+
+To run inside a scheduled **maintenance reservation** (the partition is otherwise
+blocked, jobs pend `ReqNodeNotAvail, Reserved for maintenance`):
+
+```bash
+RESERVATION=maint_3006_boost experiment/congestion/repro_paper/run.sh   # name from `scontrol show reservation`
+```
+
 ## Output
 
 - Per node count, a `compare-congestion` dose-response across victim vector sizes
