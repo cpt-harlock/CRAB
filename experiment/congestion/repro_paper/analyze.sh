@@ -47,12 +47,61 @@ for AGG in $AGGRESSORS; do
   # --- Figure-5 heatmap: ratio uncongested/congested (rows=vec, cols=nodes),
   #     aggregated over a cell's reps into mean / std / count -----------------
   PFX="$PFX" NODE_COUNTS="$NODE_COUNTS" VICTIM_MSG_SIZES="$VICTIM_MSG_SIZES" \
-  OUT="$OUT" .venv/bin/python - <<'PY'
+  OUT="$OUT" TOPO="$TOPO" .venv/bin/python - <<'PY'
 import glob, json, os, re, statistics
 from itertools import combinations
 pfx=os.environ["PFX"]; nodes=os.environ["NODE_COUNTS"].split()
 vms=os.environ["VICTIM_MSG_SIZES"].split(); out=os.environ["OUT"]
 agg=pfx.split("_")[-1]   # a2a / inc
+
+def load_topo(path):
+    # node -> cell name, node -> set(leaf switch ids), straight from the JSON
+    # (avoids importing cinetic into the .venv used for this block).
+    if not path or not os.path.exists(path): return None
+    t=json.load(open(path)); n2cell={}; n2sw={}
+    for nd in t.get("nodes",[]):
+        h=nd.get("hostname","").split(".")[0]
+        if not h: continue
+        n2cell[h]=nd.get("cell"); n2sw[h]=set(nd.get("switches",[]))
+    return (n2cell, n2sw)
+topo=load_topo(os.environ.get("TOPO"))
+
+def parts(run):
+    # victim (end=='') and aggressor (end=='f') node sets from the loaded phase.
+    p=os.path.join(run,"loaded","partition_assignment.json")
+    if not os.path.exists(p): return None, None
+    j=json.load(open(p)); vic=set(); ag=set()
+    for a in j.get("apps",[]):
+        ns={h.split(".")[0] for h in a.get("nodes",[])}
+        if a.get("role")=="victim" or a.get("end","")=="": vic|=ns
+        elif a.get("role")=="aggressor" or a.get("end")=="f": ag|=ns
+    return (vic or None), (ag or None)
+
+def _loc(a,b,n2cell,n2sw):
+    if n2sw.get(a) and n2sw.get(b) and (n2sw[a] & n2sw[b]): return "sw"
+    ca,cb=n2cell.get(a),n2cell.get(b)
+    if ca is not None and ca==cb: return "cell"
+    return "cross"
+
+def va_locality(vic,ag):
+    # locality mix over victim x aggressor host pairs, + cell span of the alloc.
+    if not topo or not vic or not ag: return None
+    n2cell,n2sw=topo; t={"sw":0,"cell":0,"cross":0}; tot=0
+    for x in vic:
+        if x not in n2cell: continue
+        for y in ag:
+            if y not in n2cell: continue
+            t[_loc(x,y,n2cell,n2sw)]+=1; tot+=1
+    if not tot: return None
+    span=len({n2cell.get(h) for h in (vic|ag) if n2cell.get(h) is not None})
+    return (t["sw"]/tot, t["cell"]/tot, t["cross"]/tot, span)
+
+def pearson(xs,ys):
+    if len(xs)<3: return None
+    mx=statistics.mean(xs); my=statistics.mean(ys)
+    sx=statistics.pstdev(xs); sy=statistics.pstdev(ys)
+    if sx==0 or sy==0: return None
+    return sum((x-mx)*(y-my) for x,y in zip(xs,ys))/len(xs)/(sx*sy)
 
 def ratio(run):
     js=sorted(glob.glob(f"{run}/analysis/congestion.json"))
@@ -95,27 +144,49 @@ def overlap(sets):
     return alloc, gN, (gN/alloc if alloc else 0), mp, (mp/alloc if alloc else 0)
 
 # Aggregate all reps of each (vm, n) cell; collect ratio + placement stats.
-mean_rows=[]; std_rows=[]; n_rows=[]; pretty_rows=[]; stat_rows=[]
+mean_rows=[]; std_rows=[]; n_rows=[]; pretty_rows=[]; stat_rows=[]; detail_rows=[]
 for vm in vms:
     mc=[]; sc=[]; nc=[]; pc=[]
     for n in nodes:
         runs=glob.glob(f"data/leonardo/{pfx}_n{n}_vm{vm}_am*_*")
-        pairs=[(ratio(x), node_set(x)) for x in runs]
-        pairs=[(r,s) for r,s in pairs if r is not None]   # keep aggregated reps
-        rs=[r for r,_ in pairs]
+        reps=[]                                   # (run, ratio, node_set, locality)
+        for run in runs:
+            r=ratio(run)
+            if r is None: continue                # keep only reps with a ratio
+            vic,ag=parts(run)
+            reps.append((run, r, node_set(run), va_locality(vic,ag)))
+        rs=[r for _,r,_,_ in reps]
         if rs:
             m=statistics.mean(rs)
             sd=statistics.stdev(rs) if len(rs)>1 else 0.0
             cv=100*sd/m if m else 0.0
             mc.append(f"{m:.3f}"); sc.append(f"{sd:.3f}"); nc.append(str(len(rs)))
             pc.append(f"{m:.3f}±{sd:.3f}({len(rs)})")
-            ov=overlap([s for _,s in pairs])
+            ov=overlap([s for _,_,s,_ in reps])
             if ov: alloc,gN,gF,mp,mpF=ov
-            else:  alloc,gN,gF,mp,mpF=(len(pairs[0][1]) or ""),"","","",""
+            else:  alloc,gN,gF,mp,mpF=(len(reps[0][2]) or ""),"","","",""
             fmt=lambda v,d=3: f"{v:.{d}f}" if isinstance(v,float) else v
+            # topology-locality of the victim<->aggressor placement, per rep.
+            locs=[l for _,_,_,l in reps if l]
+            if locs:
+                msw=statistics.mean(l[0] for l in locs)
+                mcell=statistics.mean(l[1] for l in locs)
+                mcross=statistics.mean(l[2] for l in locs)
+                mspan=statistics.mean(l[3] for l in locs)
+                xs=[l[2] for _,_,_,l in reps if l]      # cross-cell frac
+                ys=[r for _,r,_,l in reps if l]         # ratio
+                corr=pearson(xs,ys)
+                loc_cols=[fmt(mspan,1),fmt(msw),fmt(mcell),fmt(mcross),
+                          fmt(corr) if corr is not None else ""]
+            else:
+                loc_cols=["","","","",""]
             stat_rows.append([agg,n,vm,len(rs),f"{m:.4f}",f"{sd:.4f}",
                               f"{cv:.1f}",f"{min(rs):.4f}",f"{max(rs):.4f}",
-                              alloc,gN,fmt(gF),fmt(mp,1),fmt(mpF)])
+                              alloc,gN,fmt(gF),fmt(mp,1),fmt(mpF)]+loc_cols)
+            for run,r,_,l in reps:
+                detail_rows.append([agg,n,vm,os.path.basename(run),f"{r:.4f}",
+                    (fmt(l[0]) if l else ""),(fmt(l[1]) if l else ""),
+                    (fmt(l[2]) if l else ""),(l[3] if l else "")])
         else:
             mc.append(""); sc.append(""); nc.append("0"); pc.append("")
     mean_rows.append((vm,mc)); std_rows.append((vm,sc))
@@ -133,28 +204,41 @@ write(f"{out}/{pfx}_heatmap_n.csv",   n_rows)
 with open(f"{out}/{pfx}_rep_stats.csv","w") as fh:
     fh.write("aggressor,nodes,victim_vec_bytes,n_reps,ratio_mean,ratio_std,"
              "ratio_cv_pct,ratio_min,ratio_max,alloc_nodes,global_overlap_nodes,"
-             "global_overlap_frac,mean_pairwise_overlap_nodes,mean_pairwise_overlap_frac\n")
+             "global_overlap_frac,mean_pairwise_overlap_nodes,mean_pairwise_overlap_frac,"
+             "mean_span_cells,mean_va_same_switch_frac,mean_va_same_cell_frac,"
+             "mean_va_cross_cell_frac,ratio_vs_crosscell_r\n")
     for r in stat_rows:
+        fh.write(",".join(str(c) for c in r) + "\n")
+# Per-rep detail: ratio vs victim<->aggressor locality, to test whether the
+# low-ratio (strongly congested) reps are the cross-cell placements.
+with open(f"{out}/{pfx}_rep_detail.csv","w") as fh:
+    fh.write("aggressor,nodes,victim_vec_bytes,run,ratio,va_same_switch_frac,"
+             "va_same_cell_frac,va_cross_cell_frac,alloc_span_cells\n")
+    for r in detail_rows:
         fh.write(",".join(str(c) for c in r) + "\n")
 
 print(f"  heatmap -> {out}/{pfx}_heatmap.csv  (mean ratio uncongested/congested; <1 = victim slowed)")
 print(f"    std -> {out}/{pfx}_heatmap_std.csv   reps -> {out}/{pfx}_heatmap_n.csv")
-print(f"    rep stats (cv, min/max, placement overlap) -> {out}/{pfx}_rep_stats.csv")
+print(f"    rep stats (cv, min/max, overlap, locality) -> {out}/{pfx}_rep_stats.csv")
+print(f"    per-rep detail (ratio vs locality) -> {out}/{pfx}_rep_detail.csv")
 print("  mean±std(reps), rows=victim vec bytes, cols=" + " ".join(f"n{n}" for n in nodes) + ":")
 for vm,cells in pretty_rows:
     print(f"    {vm:>9} | " + "  ".join(c if c else "-" for c in cells))
 # Placement diversity note for the multi-rep cells (low overlap = independent draws).
 multi=[r for r in stat_rows if r[3]>1 and r[11]!=""]
 if multi:
-    print("  placement overlap across reps (global ∩ / mean pairwise ∩, of alloc):")
+    print("  placement overlap + victim↔aggressor locality across reps:")
     for r in multi:
+        loc=(f"  x-cell {float(r[17])*100:.0f}%" if r[17]!="" else "")
+        corr=(f"  corr(ratio,x-cell)={r[18]}" if r[18]!="" else "")
         print(f"    n{r[1]:<4} vm{r[2]:<9} n={r[3]}: "
               f"global {r[10]}/{r[9]} ({float(r[11])*100:.0f}%), "
               f"pairwise {r[12]}/{r[9]} ({float(r[13])*100:.0f}%)  "
-              f"ratio {r[4]}±{r[5]} (cv {r[6]}%)")
+              f"ratio {r[4]}±{r[5]} (cv {r[6]}%){loc}{corr}")
 PY
 done
 echo
 echo "Per-node dose-response: $OUT/<pfx>/n<N>/congestion_compare.*"
 echo "Fig-5 heatmaps: $OUT/<pfx>_heatmap.csv (mean) + _heatmap_std.csv + _heatmap_n.csv"
-echo "Per-cell rep stats (cv, min/max, placement overlap): $OUT/<pfx>_rep_stats.csv"
+echo "Per-cell rep stats (cv, min/max, overlap, locality): $OUT/<pfx>_rep_stats.csv"
+echo "Per-rep detail (ratio vs victim<->aggressor locality): $OUT/<pfx>_rep_detail.csv"
