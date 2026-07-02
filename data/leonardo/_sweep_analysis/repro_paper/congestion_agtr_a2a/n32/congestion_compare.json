@@ -1,0 +1,95 @@
+{
+  "configs": [
+    {
+      "label": "congestion_agtr_a2a_n32_vm8_am1048576_2026-07-01_14-50-26-893483",
+      "x": 8.0,
+      "victim_benchmark": "agtr_comm_only.py",
+      "overall_bw_drop_pct": -1.8349063383318056,
+      "overall_lat_inc_pct": -1.8018441851712517,
+      "by_label_drop_pct": {
+        "same_cell": -1.7828664498052191,
+        "cross_cell": -1.8310066256996038
+      },
+      "n_common_nodes": 16
+    },
+    {
+      "label": "congestion_agtr_a2a_n32_vm64_am1048576_2026-07-01_14-50-31-892363",
+      "x": 64.0,
+      "victim_benchmark": "agtr_comm_only.py",
+      "overall_bw_drop_pct": 0.28466454767268107,
+      "overall_lat_inc_pct": 0.28547725941831553,
+      "by_label_drop_pct": {
+        "same_cell": 0.3345616757176189,
+        "cross_cell": 0.8469916202900363
+      },
+      "n_common_nodes": 16
+    },
+    {
+      "label": "congestion_agtr_a2a_n32_vm512_am1048576_2026-07-01_14-50-37-402656",
+      "x": 512.0,
+      "victim_benchmark": "agtr_comm_only.py",
+      "overall_bw_drop_pct": 0.25637373593506163,
+      "overall_lat_inc_pct": 0.2570327002713013,
+      "by_label_drop_pct": {
+        "same_cell": 0.33103187364040837,
+        "cross_cell": 0.3711478797966967
+      },
+      "n_common_nodes": 16
+    },
+    {
+      "label": "congestion_agtr_a2a_n32_vm4096_am1048576_2026-07-01_14-50-41-767185",
+      "x": 4096.0,
+      "victim_benchmark": "agtr_comm_only.py",
+      "overall_bw_drop_pct": -0.17746550287928076,
+      "overall_lat_inc_pct": -0.17715112075198644,
+      "by_label_drop_pct": {
+        "same_cell": -0.16447668968873247,
+        "cross_cell": -0.09705534299995593
+      },
+      "n_common_nodes": 16
+    },
+    {
+      "label": "congestion_agtr_a2a_n32_vm32768_am1048576_2026-07-01_14-50-45-994074",
+      "x": 32768.0,
+      "victim_benchmark": "agtr_comm_only.py",
+      "overall_bw_drop_pct": 0.9289781072453609,
+      "overall_lat_inc_pct": 0.9376890502117202,
+      "by_label_drop_pct": {
+        "same_cell": 0.95482158917906,
+        "cross_cell": 0.9447492812341939
+      },
+      "n_common_nodes": 16
+    },
+    {
+      "label": "congestion_agtr_a2a_n32_vm2097152_am1048576_2026-07-01_14-50-55-835503",
+      "x": 2097152.0,
+      "victim_benchmark": "agtr_comm_only.py",
+      "overall_bw_drop_pct": 1.3420168376295127,
+      "overall_lat_inc_pct": 1.360271887575316,
+      "by_label_drop_pct": {
+        "same_cell": 1.2795012179849037,
+        "cross_cell": 2.201504322161558
+      },
+      "n_common_nodes": 16
+    },
+    {
+      "label": "congestion_agtr_a2a_n32_vm16777216_am1048576_2026-07-01_14-51-00-458403",
+      "x": 16777216.0,
+      "victim_benchmark": "agtr_comm_only.py",
+      "overall_bw_drop_pct": 0.3268231214135421,
+      "overall_lat_inc_pct": 0.3278947576344198,
+      "by_label_drop_pct": {
+        "same_cell": 0.3229701305967017,
+        "cross_cell": 0.17334284936267055
+      },
+      "n_common_nodes": 16
+    }
+  ],
+  "labels": [
+    "same_cell",
+    "cross_cell"
+  ],
+  "caveats": [
+    "single-run point estimates; cross-config deltas carry run-to-run variance \u2014 repeat runs to separate signal from noise."
+  ]
+}

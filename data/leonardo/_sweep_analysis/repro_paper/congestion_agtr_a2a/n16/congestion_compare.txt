@@ -1,0 +1,21 @@
+==============================================================================
+CONGESTION COMPARISON (victim degradation across configs)
+==============================================================================
+configs        : 8
+victim         : agtr_comm_only.py
+
+bandwidth drop% > 0 = victim is slower under load (more congestion).
+
+  config                  x   overall   same_cell
+  congestion_agtr_a2a_n16_vm8_am1048576_2026-07-01_14-46-20-429085     8.00     +0.1%       +0.1%
+  congestion_agtr_a2a_n16_vm64_am1048576_2026-07-01_14-46-22-754204    64.00     +2.7%       +2.7%
+  congestion_agtr_a2a_n16_vm512_am1048576_2026-07-01_14-46-25-336510   512.00     +0.2%       +0.2%
+  congestion_agtr_a2a_n16_vm4096_am1048576_2026-07-01_14-46-27-291243  4096.00     +1.0%       +1.0%
+  congestion_agtr_a2a_n16_vm32768_am1048576_2026-07-01_14-50-08-262494 32768.00     -0.1%       -0.1%
+  congestion_agtr_a2a_n16_vm262144_am1048576_2026-07-01_14-50-13-494906 262144.00     +0.0%       +0.0%
+  congestion_agtr_a2a_n16_vm2097152_am1048576_2026-07-01_14-50-18-349890 2097152.00     -0.4%       -0.4%
+  congestion_agtr_a2a_n16_vm16777216_am1048576_2026-07-01_14-50-22-581293 16777216.00     -0.5%       -0.5%
+
+-- NOTES ---------------------------------------------------------------------
+  ! single-run point estimates; cross-config deltas carry run-to-run variance — repeat runs to separate signal from noise.
+==============================================================================

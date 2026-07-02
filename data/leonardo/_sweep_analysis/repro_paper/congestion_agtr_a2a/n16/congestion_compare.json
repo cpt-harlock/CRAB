@@ -1,0 +1,98 @@
+{
+  "configs": [
+    {
+      "label": "congestion_agtr_a2a_n16_vm8_am1048576_2026-07-01_14-46-20-429085",
+      "x": 8.0,
+      "victim_benchmark": "agtr_comm_only.py",
+      "overall_bw_drop_pct": 0.0713537798529395,
+      "overall_lat_inc_pct": 0.07140503130834197,
+      "by_label_drop_pct": {
+        "same_cell": 0.0713537798529395
+      },
+      "n_common_nodes": 8
+    },
+    {
+      "label": "congestion_agtr_a2a_n16_vm64_am1048576_2026-07-01_14-46-22-754204",
+      "x": 64.0,
+      "victim_benchmark": "agtr_comm_only.py",
+      "overall_bw_drop_pct": 2.684204897871902,
+      "overall_lat_inc_pct": 2.758241758241773,
+      "by_label_drop_pct": {
+        "same_cell": 2.684204897871902
+      },
+      "n_common_nodes": 8
+    },
+    {
+      "label": "congestion_agtr_a2a_n16_vm512_am1048576_2026-07-01_14-46-25-336510",
+      "x": 512.0,
+      "victim_benchmark": "agtr_comm_only.py",
+      "overall_bw_drop_pct": 0.24658573596358205,
+      "overall_lat_inc_pct": 0.24719528427457135,
+      "by_label_drop_pct": {
+        "same_cell": 0.24658573596358205
+      },
+      "n_common_nodes": 8
+    },
+    {
+      "label": "congestion_agtr_a2a_n16_vm4096_am1048576_2026-07-01_14-46-27-291243",
+      "x": 4096.0,
+      "victim_benchmark": "agtr_comm_only.py",
+      "overall_bw_drop_pct": 0.9690362631539045,
+      "overall_lat_inc_pct": 0.9785184618912949,
+      "by_label_drop_pct": {
+        "same_cell": 0.9690362631539045
+      },
+      "n_common_nodes": 8
+    },
+    {
+      "label": "congestion_agtr_a2a_n16_vm32768_am1048576_2026-07-01_14-50-08-262494",
+      "x": 32768.0,
+      "victim_benchmark": "agtr_comm_only.py",
+      "overall_bw_drop_pct": -0.14968814968814007,
+      "overall_lat_inc_pct": -0.1494644191646642,
+      "by_label_drop_pct": {
+        "same_cell": -0.14968814968814007
+      },
+      "n_common_nodes": 8
+    },
+    {
+      "label": "congestion_agtr_a2a_n16_vm262144_am1048576_2026-07-01_14-50-13-494906",
+      "x": 262144.0,
+      "victim_benchmark": "agtr_comm_only.py",
+      "overall_bw_drop_pct": 0.024420450382870905,
+      "overall_lat_inc_pct": 0.024426415423528084,
+      "by_label_drop_pct": {
+        "same_cell": 0.024420450382870905
+      },
+      "n_common_nodes": 8
+    },
+    {
+      "label": "congestion_agtr_a2a_n16_vm2097152_am1048576_2026-07-01_14-50-18-349890",
+      "x": 2097152.0,
+      "victim_benchmark": "agtr_comm_only.py",
+      "overall_bw_drop_pct": -0.4118142111575315,
+      "overall_lat_inc_pct": -0.4101252583430831,
+      "by_label_drop_pct": {
+        "same_cell": -0.4118142111575315
+      },
+      "n_common_nodes": 8
+    },
+    {
+      "label": "congestion_agtr_a2a_n16_vm16777216_am1048576_2026-07-01_14-50-22-581293",
+      "x": 16777216.0,
+      "victim_benchmark": "agtr_comm_only.py",
+      "overall_bw_drop_pct": -0.5038774869485061,
+      "overall_lat_inc_pct": -0.5013512905277925,
+      "by_label_drop_pct": {
+        "same_cell": -0.5038774869485061
+      },
+      "n_common_nodes": 8
+    }
+  ],
+  "labels": [
+    "same_cell"
+  ],
+  "caveats": [
+    "single-run point estimates; cross-config deltas carry run-to-run variance \u2014 repeat runs to separate signal from noise."
+  ]
+}
