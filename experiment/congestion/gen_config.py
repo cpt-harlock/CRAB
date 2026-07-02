@@ -56,8 +56,8 @@ def main() -> None:
                         "is delayed by this much, so the fabric is already "
                         "congested when the victim's measurement begins (0=both "
                         "start together)")
-    p.add_argument("--walltime", default="00:30:00")
-    p.add_argument("--timeout", default="1500.0")
+    p.add_argument("--walltime", default="01:00:00")
+    p.add_argument("--timeout", default="3300.0")
     p.add_argument("--qos-min-nodes", type=int, default=32)
     p.add_argument("--no-auto-qos", action="store_true",
                    help="skip the automatic dcgp_qos_bprod + cpus-per-task")

@@ -20,8 +20,8 @@ def main() -> None:
     p.add_argument("--msgsize", type=int, required=True)
     p.add_argument("--window", type=int, default=64)
     p.add_argument("--iters", type=int, default=10)
-    p.add_argument("--walltime", default="00:30:00")
-    p.add_argument("--timeout", default="1500.0")
+    p.add_argument("--walltime", default="01:00:00")
+    p.add_argument("--timeout", default="3300.0")
     p.add_argument("--qos-min-nodes", type=int, default=32,
                    help="add dcgp_qos_bprod + cpus-per-task at/above this count")
     p.add_argument("--no-auto-qos", action="store_true",

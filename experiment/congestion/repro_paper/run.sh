@@ -24,6 +24,13 @@ AGGRESSORS="${AGGRESSORS:-alltoall incast}"
 ITERS="${ITERS:-1000}"; WARMUP="${WARMUP:-100}"
 WALLTIME="${WALLTIME:-00:30:00}"
 
+# --- REPS: resubmit each cell N times. Every job gets a fresh Slurm allocation,
+#     so reps land on different node sets (different topology placement) — that's
+#     the replicate-level variance the in-run iterations can't sample. analyze.sh
+#     aggregates all reps of a cell into mean +/- std. Combine with CHAIN=1 so the
+#     reps still run one-at-a-time (no cross-job false congestion).
+REPS="${REPS:-1}"
+
 # --- aggressor message size: NOT stated in the paper (fixed background noise).
 #     ASSUMPTION, override via AGGR_MSG. ~1 MiB maximised contention in our own
 #     dose-response on DCGP.
@@ -41,22 +48,25 @@ GEN="experiment/congestion/repro_paper/generated"; mkdir -p "$GEN"
 for AGG in $AGGRESSORS; do
   for N in $NODE_COUNTS; do
     for VM in $VICTIM_MSG_SIZES; do
-      cfg="$GEN/repro_agtr_${AGG}_n${N}_vm${VM}.json"
-      launch_dep_args
-      if python experiment/congestion/gen_config.py \
-           --victim allgather --aggressor "$AGG" --nodes "$N" \
-           --victim-msgsize "$VM" --aggr-msgsize "$AGGR_MSG" \
-           --iters "$ITERS" --warmup "$WARMUP" --walltime "$WALLTIME" \
-           "${LAUNCH_GEN_ARGS[@]}" "${LAUNCH_DEP_ARGS[@]}" -o "$cfg" >/dev/null; then
-        launch_submit "$cfg" "allgather vs $AGG | ${N} nodes | victim vec ${VM} B"
-      fi
+      for REP in $(seq 1 "$REPS"); do
+        cfg="$GEN/repro_agtr_${AGG}_n${N}_vm${VM}_r${REP}.json"
+        launch_dep_args
+        if python experiment/congestion/gen_config.py \
+             --victim allgather --aggressor "$AGG" --nodes "$N" \
+             --victim-msgsize "$VM" --aggr-msgsize "$AGGR_MSG" \
+             --iters "$ITERS" --warmup "$WARMUP" --walltime "$WALLTIME" \
+             "${LAUNCH_GEN_ARGS[@]}" "${LAUNCH_DEP_ARGS[@]}" -o "$cfg" >/dev/null; then
+          launch_submit "$cfg" "allgather vs $AGG | ${N} nodes | victim vec ${VM} B | rep ${REP}/${REPS}"
+        fi
+      done
     done
   done
 done
 
 launch_footer
-echo "  axes: nodes={$NODE_COUNTS}  victim-vec={$VICTIM_MSG_SIZES}  aggr-msg=$AGGR_MSG"
+echo "  axes: nodes={$NODE_COUNTS}  victim-vec={$VICTIM_MSG_SIZES}  aggr-msg=$AGGR_MSG  reps=$REPS"
 echo "Analyze with: experiment/congestion/repro_paper/analyze.sh"
 echo
-echo "NB: full grid = 2x5x8 = 80 jobs up to 256 Booster nodes. Start with a subset,"
-echo "    e.g.  NODE_COUNTS='16 32' VICTIM_MSG_SIZES='4096 2097152' $0"
+echo "NB: full grid = 2x5x8 = 80 cells up to 256 Booster nodes, x REPS jobs each."
+echo "    Start with a subset, e.g."
+echo "    NODE_COUNTS='16 32' VICTIM_MSG_SIZES='4096 2097152' REPS=5 CHAIN=1 $0"

@@ -19,14 +19,16 @@ cd "$REPO_ROOT" || exit 1
 source experiment/lib/launch.sh
 HERE="experiment/saturation_sweep"
 GEN="$HERE/generated"
+WALLTIME=${WALLTIME:-"01:00:00"}
+TIMEOUT=${TIMEOUT:-"3300.0"}
 mkdir -p "$GEN"
 
 for N in $NODE_COUNTS; do
   for M in $MSG_SIZES; do
     cfg="$GEN/tournament_n${N}_m${M}.json"
     launch_dep_args
-    if python "$HERE/gen_config.py" --nodes "$N" --msgsize "$M" \
-         "${LAUNCH_GEN_ARGS[@]}" "${LAUNCH_DEP_ARGS[@]}" -o "$cfg" >/dev/null; then
+    if python "$HERE/gen_config.py" --nodes "$N" --msgsize "$M" --walltime "$WALLTIME" --timeout "$TIMEOUT" \
+      "${LAUNCH_GEN_ARGS[@]}" "${LAUNCH_DEP_ARGS[@]}" -o "$cfg" >/dev/null; then
       launch_submit "$cfg" "saturation: ${N} nodes, msg ${M} B"
     fi
   done

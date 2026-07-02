@@ -17,6 +17,10 @@
 #   NO_AUTO_QOS   1 -> pass --no-auto-qos to gen_config (skip its auto big-QOS)
 #   CHAIN         1 -> serialize: each job --dependency=afterany:<prev> so only
 #                      one runs at a time (avoids cross-job "false congestion")
+#   CHAIN_AFTER   seed the chain on an EXISTING job id, so this invocation's
+#                 first job waits on it (chain a second run.sh onto a first —
+#                 e.g. a different-QOS node tier — with no gap for co-running).
+#                 Requires CHAIN=1.
 #
 # Usage in a runner loop:
 #   source experiment/lib/launch.sh
@@ -59,7 +63,8 @@ LAUNCH_GEN_ARGS=()
 [ -n "$RESERVATION" ] && LAUNCH_GEN_ARGS+=(--sbatch="--reservation=$RESERVATION")
 for _d in $EXTRA_SBATCH; do LAUNCH_GEN_ARGS+=(--sbatch="$_d"); done
 
-LAUNCH_PREV=""        # last successfully-submitted job id (for the chain)
+LAUNCH_PREV="${CHAIN_AFTER:-}"   # last submitted job id (for the chain); seed
+                                 # from CHAIN_AFTER to continue a prior sweep
 LAUNCH_N=0            # number of jobs submitted OK
 LAUNCH_FAILED=0       # number of cells whose submission failed
 LAUNCH_DEP_ARGS=()    # per-job chain dependency (refreshed by launch_dep_args)
