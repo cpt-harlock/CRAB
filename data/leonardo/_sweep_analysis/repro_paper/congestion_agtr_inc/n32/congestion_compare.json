@@ -1,105 +1,110 @@
 {
   "configs": [
     {
-      "label": "congestion_agtr_inc_n32_vm8_am1048576_2026-07-01_14-52-32-787523",
+      "label": "congestion_agtr_inc_n32_vm8_am1048576_2026-07-02_16-00-12-071688",
       "x": 8.0,
       "victim_benchmark": "agtr_comm_only.py",
-      "overall_bw_drop_pct": 0.07476539541311152,
-      "overall_lat_inc_pct": 0.0748213940915342,
+      "overall_bw_drop_pct": 4.074828671976307,
+      "overall_lat_inc_pct": 4.247924309712308,
       "by_label_drop_pct": {
-        "same_cell": -0.18256942442587798,
-        "cross_cell": 0.8857182901288042
+        "same_cell": 4.303468744203289,
+        "cross_cell": 1.9240506329113745
       },
       "n_common_nodes": 16
     },
     {
-      "label": "congestion_agtr_inc_n32_vm64_am1048576_2026-07-01_14-52-39-010835",
+      "label": "congestion_agtr_inc_n32_vm64_am1048576_2026-07-02_16-00-20-614850",
       "x": 64.0,
       "victim_benchmark": "agtr_comm_only.py",
-      "overall_bw_drop_pct": 0.3899800850973648,
-      "overall_lat_inc_pct": 0.3915069414420793,
+      "overall_bw_drop_pct": 1.1493170042392906,
+      "overall_lat_inc_pct": 1.1626798818259707,
       "by_label_drop_pct": {
-        "same_cell": 0.06442524554187476,
-        "cross_cell": 1.5067696041024627
+        "same_cell": 0.958044268252401,
+        "cross_cell": 0.318383167220372,
+        "unknown": 1.9767297896991034
       },
       "n_common_nodes": 16
     },
     {
-      "label": "congestion_agtr_inc_n32_vm512_am1048576_2026-07-01_14-52-44-894679",
+      "label": "congestion_agtr_inc_n32_vm512_am1048576_2026-07-02_16-00-30-102351",
       "x": 512.0,
       "victim_benchmark": "agtr_comm_only.py",
-      "overall_bw_drop_pct": 0.33662162793960193,
-      "overall_lat_inc_pct": 0.3377585964253987,
+      "overall_bw_drop_pct": 1.5048135339751478,
+      "overall_lat_inc_pct": 1.527804137407482,
       "by_label_drop_pct": {
-        "same_cell": -0.013993189980874884,
-        "cross_cell": 1.4333954630176144
+        "same_cell": 2.180351134923349,
+        "cross_cell": -1.9991092643305075,
+        "unknown": 3.134861885358306
       },
       "n_common_nodes": 16
     },
     {
-      "label": "congestion_agtr_inc_n32_vm4096_am1048576_2026-07-01_14-52-50-691590",
+      "label": "congestion_agtr_inc_n32_vm4096_am1048576_2026-07-02_16-00-38-089589",
       "x": 4096.0,
       "victim_benchmark": "agtr_comm_only.py",
-      "overall_bw_drop_pct": 0.47509739015040187,
-      "overall_lat_inc_pct": 0.477365372237719,
+      "overall_bw_drop_pct": 1.668763573374083,
+      "overall_lat_inc_pct": 1.6970838590443202,
       "by_label_drop_pct": {
-        "same_cell": 0.45032267215090926,
-        "cross_cell": 0.061906837910732516
+        "same_cell": 1.7765833067934307,
+        "cross_cell": 1.8164099990079774,
+        "unknown": 0.951286907180603
       },
       "n_common_nodes": 16
     },
     {
-      "label": "congestion_agtr_inc_n32_vm32768_am1048576_2026-07-01_14-52-55-987136",
+      "label": "congestion_agtr_inc_n32_vm32768_am1048576_2026-07-02_16-00-46-661305",
       "x": 32768.0,
       "victim_benchmark": "agtr_comm_only.py",
-      "overall_bw_drop_pct": 1.2308745261952718,
-      "overall_lat_inc_pct": 1.2462138713486248,
+      "overall_bw_drop_pct": 3.9907388966341273,
+      "overall_lat_inc_pct": 4.1566186957085325,
       "by_label_drop_pct": {
-        "same_cell": 1.0885405287668084,
-        "cross_cell": 1.9654892796587133
+        "same_cell": 3.7929701636694304,
+        "cross_cell": 5.483473217495976
       },
       "n_common_nodes": 16
     },
     {
-      "label": "congestion_agtr_inc_n32_vm262144_am1048576_2026-07-02_12-56-07-022553",
+      "label": "congestion_agtr_inc_n32_vm262144_am1048576_2026-07-02_16-01-19-154690",
       "x": 262144.0,
       "victim_benchmark": "agtr_comm_only.py",
-      "overall_bw_drop_pct": 1.186177043043915,
-      "overall_lat_inc_pct": 1.2004161002163087,
+      "overall_bw_drop_pct": 28.09215271953586,
+      "overall_lat_inc_pct": 39.066880904110754,
       "by_label_drop_pct": {
-        "same_cell": 1.1807941547427487,
-        "cross_cell": 1.0435719377920059
+        "same_cell": 28.707593608919126,
+        "cross_cell": 24.050493666876772
       },
       "n_common_nodes": 16
     },
     {
-      "label": "congestion_agtr_inc_n32_vm2097152_am1048576_2026-07-02_12-56-18-589916",
+      "label": "congestion_agtr_inc_n32_vm2097152_am1048576_2026-07-02_16-01-50-360971",
       "x": 2097152.0,
       "victim_benchmark": "agtr_comm_only.py",
-      "overall_bw_drop_pct": 43.313048336166396,
-      "overall_lat_inc_pct": 76.4074427480916,
+      "overall_bw_drop_pct": 42.95396377709997,
+      "overall_lat_inc_pct": 75.29702220752776,
       "by_label_drop_pct": {
-        "same_cell": 41.727870833696926,
-        "cross_cell": 48.54784926042764
+        "same_cell": 41.74198779435387,
+        "cross_cell": 43.848563063487795,
+        "unknown": 47.89151303143698
       },
       "n_common_nodes": 16
     },
     {
-      "label": "congestion_agtr_inc_n32_vm16777216_am1048576_2026-07-02_12-56-29-126174",
+      "label": "congestion_agtr_inc_n32_vm16777216_am1048576_2026-07-02_16-02-20-710735",
       "x": 16777216.0,
       "victim_benchmark": "agtr_comm_only.py",
-      "overall_bw_drop_pct": 35.70012995178816,
-      "overall_lat_inc_pct": 55.521309645912154,
+      "overall_bw_drop_pct": 43.553380674440454,
+      "overall_lat_inc_pct": 77.15852968054942,
       "by_label_drop_pct": {
-        "same_cell": 35.57012999154428,
-        "cross_cell": 37.43924287794984
+        "same_cell": 43.00056427597238,
+        "cross_cell": 45.933803869274485
       },
       "n_common_nodes": 16
     }
   ],
   "labels": [
     "same_cell",
-    "cross_cell"
+    "cross_cell",
+    "unknown"
   ],
   "caveats": [
     "single-run point estimates; cross-config deltas carry run-to-run variance \u2014 repeat runs to separate signal from noise."
