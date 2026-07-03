@@ -17,6 +17,15 @@ VICTIM_MSG_SIZES="${VICTIM_MSG_SIZES:-8 64 512 4096 32768 262144 2097152 1677721
 AGGRESSORS="${AGGRESSORS:-alltoall incast}"
 TOPO="topologies/leonardo.json"
 
+# --- AGGR_MSG: scope which aggressor message size to aggregate (mirrors run.sh).
+#     empty (default) -> am* : every aggressor size for the cell (back-compatible);
+#     "match"         -> am<VM> per cell (the aggressor-follows-victim sweep);
+#     <number>        -> that exact am. When set, outputs get an _am<val> suffix so
+#     a scoped analysis never overwrites the default (fixed-size) heatmap column.
+AGGR_MSG="${AGGR_MSG:-}"
+if [ -n "$AGGR_MSG" ]; then SUF="_am${AGGR_MSG}"; else SUF=""; fi
+amtok() { if [ -z "$AGGR_MSG" ]; then echo "am*"; elif [ "$AGGR_MSG" = match ]; then echo "am$1"; else echo "am${AGGR_MSG}"; fi; }
+
 REPO_ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 cd "$REPO_ROOT"
 OUT="data/leonardo/_sweep_analysis/repro_paper"; mkdir -p "$OUT"
@@ -29,7 +38,7 @@ for AGG in $AGGRESSORS; do
     for VM in $VICTIM_MSG_SIZES; do
       # newest-first: analyze every rep of the cell, keep the newest for the
       # per-node dose-response line below (the heatmap aggregates all reps).
-      mapfile -t reps < <(ls -dt data/leonardo/${PFX}_n${N}_vm${VM}_am*_* 2>/dev/null || true)
+      mapfile -t reps < <(ls -dt data/leonardo/${PFX}_n${N}_vm${VM}_$(amtok "$VM")_* 2>/dev/null || true)
       [ "${#reps[@]}" -eq 0 ] && continue
       for r in "${reps[@]}"; do
         cinetic analyze "$r" --topology "$TOPO" --json >/dev/null 2>&1
@@ -37,7 +46,7 @@ for AGG in $AGGRESSORS; do
       dirs+=("${reps[0]}"); xs+=("$VM")
     done
     if [ "${#dirs[@]}" -ge 2 ]; then
-      odir="$OUT/${PFX}/n${N}"; mkdir -p "$odir"
+      odir="$OUT/${PFX}${SUF}/n${N}"; mkdir -p "$odir"
       x_csv="$(IFS=,; echo "${xs[*]}")"
       cinetic analyze compare-congestion "${dirs[@]}" --x "$x_csv" \
         --topology "$TOPO" --outdir "$odir" --json >/dev/null 2>&1
@@ -47,11 +56,14 @@ for AGG in $AGGRESSORS; do
   # --- Figure-5 heatmap: ratio uncongested/congested (rows=vec, cols=nodes),
   #     aggregated over a cell's reps into mean / std / count -----------------
   PFX="$PFX" NODE_COUNTS="$NODE_COUNTS" VICTIM_MSG_SIZES="$VICTIM_MSG_SIZES" \
-  OUT="$OUT" TOPO="$TOPO" .venv/bin/python - <<'PY'
+  OUT="$OUT" TOPO="$TOPO" AGGR_MSG="$AGGR_MSG" SUF="$SUF" .venv/bin/python - <<'PY'
 import glob, json, os, re, statistics
 from itertools import combinations
 pfx=os.environ["PFX"]; nodes=os.environ["NODE_COUNTS"].split()
 vms=os.environ["VICTIM_MSG_SIZES"].split(); out=os.environ["OUT"]
+am=os.environ.get("AGGR_MSG",""); suf=os.environ.get("SUF","")
+def amtok(vm):
+    return "am*" if not am else (f"am{vm}" if am=="match" else f"am{am}")
 agg=pfx.split("_")[-1]   # a2a / inc
 
 def load_topo(path):
@@ -148,7 +160,7 @@ mean_rows=[]; std_rows=[]; n_rows=[]; pretty_rows=[]; stat_rows=[]; detail_rows=
 for vm in vms:
     mc=[]; sc=[]; nc=[]; pc=[]
     for n in nodes:
-        runs=glob.glob(f"data/leonardo/{pfx}_n{n}_vm{vm}_am*_*")
+        runs=glob.glob(f"data/leonardo/{pfx}_n{n}_vm{vm}_{amtok(vm)}_*")
         reps=[]                                   # (run, ratio, node_set, locality)
         for run in runs:
             r=ratio(run)
@@ -198,10 +210,10 @@ def write(path, rows):
         for vm,cells in rows:
             fh.write(vm + "," + ",".join(cells) + "\n")
 
-write(f"{out}/{pfx}_heatmap.csv",     mean_rows)
-write(f"{out}/{pfx}_heatmap_std.csv", std_rows)
-write(f"{out}/{pfx}_heatmap_n.csv",   n_rows)
-with open(f"{out}/{pfx}_rep_stats.csv","w") as fh:
+write(f"{out}/{pfx}{suf}_heatmap.csv",     mean_rows)
+write(f"{out}/{pfx}{suf}_heatmap_std.csv", std_rows)
+write(f"{out}/{pfx}{suf}_heatmap_n.csv",   n_rows)
+with open(f"{out}/{pfx}{suf}_rep_stats.csv","w") as fh:
     fh.write("aggressor,nodes,victim_vec_bytes,n_reps,ratio_mean,ratio_std,"
              "ratio_cv_pct,ratio_min,ratio_max,alloc_nodes,global_overlap_nodes,"
              "global_overlap_frac,mean_pairwise_overlap_nodes,mean_pairwise_overlap_frac,"
@@ -211,16 +223,16 @@ with open(f"{out}/{pfx}_rep_stats.csv","w") as fh:
         fh.write(",".join(str(c) for c in r) + "\n")
 # Per-rep detail: ratio vs victim<->aggressor locality, to test whether the
 # low-ratio (strongly congested) reps are the cross-cell placements.
-with open(f"{out}/{pfx}_rep_detail.csv","w") as fh:
+with open(f"{out}/{pfx}{suf}_rep_detail.csv","w") as fh:
     fh.write("aggressor,nodes,victim_vec_bytes,run,ratio,va_same_switch_frac,"
              "va_same_cell_frac,va_cross_cell_frac,alloc_span_cells\n")
     for r in detail_rows:
         fh.write(",".join(str(c) for c in r) + "\n")
 
-print(f"  heatmap -> {out}/{pfx}_heatmap.csv  (mean ratio uncongested/congested; <1 = victim slowed)")
-print(f"    std -> {out}/{pfx}_heatmap_std.csv   reps -> {out}/{pfx}_heatmap_n.csv")
-print(f"    rep stats (cv, min/max, overlap, locality) -> {out}/{pfx}_rep_stats.csv")
-print(f"    per-rep detail (ratio vs locality) -> {out}/{pfx}_rep_detail.csv")
+print(f"  heatmap -> {out}/{pfx}{suf}_heatmap.csv  (mean ratio uncongested/congested; <1 = victim slowed)")
+print(f"    std -> {out}/{pfx}{suf}_heatmap_std.csv   reps -> {out}/{pfx}{suf}_heatmap_n.csv")
+print(f"    rep stats (cv, min/max, overlap, locality) -> {out}/{pfx}{suf}_rep_stats.csv")
+print(f"    per-rep detail (ratio vs locality) -> {out}/{pfx}{suf}_rep_detail.csv")
 print("  mean±std(reps), rows=victim vec bytes, cols=" + " ".join(f"n{n}" for n in nodes) + ":")
 for vm,cells in pretty_rows:
     print(f"    {vm:>9} | " + "  ".join(c if c else "-" for c in cells))

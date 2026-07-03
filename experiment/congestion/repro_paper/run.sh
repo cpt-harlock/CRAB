@@ -33,7 +33,10 @@ REPS="${REPS:-1}"
 
 # --- aggressor message size: NOT stated in the paper (fixed background noise).
 #     ASSUMPTION, override via AGGR_MSG. ~1 MiB maximised contention in our own
-#     dose-response on DCGP.
+#     dose-response on DCGP. Special value AGGR_MSG=match ties the aggressor's
+#     message size to the victim's vector size *per cell* (the hypothesis that the
+#     paper scaled the aggressor with the y-axis) — each cell then lands in its own
+#     am<VM> dir, so a matched sweep does not clobber the fixed-size column.
 AGGR_MSG="${AGGR_MSG:-1048576}"
 
 # --- repro-specific default (env still overrides). The Booster partition/QOS/
@@ -48,15 +51,16 @@ GEN="experiment/congestion/repro_paper/generated"; mkdir -p "$GEN"
 for AGG in $AGGRESSORS; do
   for N in $NODE_COUNTS; do
     for VM in $VICTIM_MSG_SIZES; do
+      if [ "$AGGR_MSG" = "match" ]; then amsg="$VM"; else amsg="$AGGR_MSG"; fi
       for REP in $(seq 1 "$REPS"); do
-        cfg="$GEN/repro_agtr_${AGG}_n${N}_vm${VM}_r${REP}.json"
+        cfg="$GEN/repro_agtr_${AGG}_n${N}_vm${VM}_am${amsg}_r${REP}.json"
         launch_dep_args
         if python experiment/congestion/gen_config.py \
              --victim allgather --aggressor "$AGG" --nodes "$N" \
-             --victim-msgsize "$VM" --aggr-msgsize "$AGGR_MSG" \
+             --victim-msgsize "$VM" --aggr-msgsize "$amsg" \
              --iters "$ITERS" --warmup "$WARMUP" --walltime "$WALLTIME" \
              "${LAUNCH_GEN_ARGS[@]}" "${LAUNCH_DEP_ARGS[@]}" -o "$cfg" >/dev/null; then
-          launch_submit "$cfg" "allgather vs $AGG | ${N} nodes | victim vec ${VM} B | rep ${REP}/${REPS}"
+          launch_submit "$cfg" "allgather vs $AGG | ${N} nodes | victim vec ${VM} B | aggr ${amsg} B | rep ${REP}/${REPS}"
         fi
       done
     done
