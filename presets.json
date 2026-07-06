@@ -27,6 +27,25 @@
             "module load openmpi"
         ]
     },
+    "leonardo_sl0": {
+        "description": "Leonardo Booster, forced UCX pml + IB Service Level 0 (SL contrast vs 'leonardo', which is SL=1). Data lands in data/leonardo_sl0/.",
+        "env": {
+            "CINETIC_WL_MANAGER": "slurm",
+            "CINETIC_PINNING_FLAGS": "--cpu-bind=socket",
+            "LD_LIBRARY_PATH": "${LD_LIBRARY_PATH}:/leonardo/smcx_home/bench/software/lib/ucx/nvhpc-22.2_pgi_cuda/lib/",
+            "OMPI_MCA_pml": "ucx",
+            "UCX_IB_SL": "0",
+            "UCX_LOG_LEVEL": "error",
+            "NCCL_IB_SL": "${NCCL_IB_SL}"
+        },
+        "sbatch": [
+            "--partition=dcgp_usr_prod"
+        ],
+        "header": [
+            "module purge",
+            "module load openmpi"
+        ]
+    },
     "local": {
         "description": "Local Development Environment (OpenMPI)",
         "env": {

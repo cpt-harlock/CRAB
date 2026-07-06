@@ -17,6 +17,11 @@ VICTIM_MSG_SIZES="${VICTIM_MSG_SIZES:-8 64 512 4096 32768 262144 2097152 1677721
 AGGRESSORS="${AGGRESSORS:-alltoall incast}"
 TOPO="topologies/leonardo.json"
 
+# --- DATA_DIR: which data/<system> tree to read runs from (default data/leonardo).
+#     Set DATA_DIR=data/leonardo_sl0 to analyze the SL=0 arm; OUT then defaults to
+#     that tree's own _sweep_analysis so SL=0 outputs never mix with the SL=1 ones.
+DATA_DIR="${DATA_DIR:-data/leonardo}"
+
 # --- AGGR_MSG: scope which aggressor message size to aggregate (mirrors run.sh).
 #     empty (default) -> am* : every aggressor size for the cell (back-compatible);
 #     "match"         -> am<VM> per cell (the aggressor-follows-victim sweep);
@@ -28,7 +33,7 @@ amtok() { if [ -z "$AGGR_MSG" ]; then echo "am*"; elif [ "$AGGR_MSG" = match ]; 
 
 REPO_ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 cd "$REPO_ROOT"
-OUT="data/leonardo/_sweep_analysis/repro_paper"; mkdir -p "$OUT"
+OUT="${OUT:-$DATA_DIR/_sweep_analysis/repro_paper}"; mkdir -p "$OUT"
 declare -A ATAG=( [alltoall]=a2a [incast]=inc )
 
 for AGG in $AGGRESSORS; do
@@ -38,7 +43,7 @@ for AGG in $AGGRESSORS; do
     for VM in $VICTIM_MSG_SIZES; do
       # newest-first: analyze every rep of the cell, keep the newest for the
       # per-node dose-response line below (the heatmap aggregates all reps).
-      mapfile -t reps < <(ls -dt data/leonardo/${PFX}_n${N}_vm${VM}_$(amtok "$VM")_* 2>/dev/null || true)
+      mapfile -t reps < <(ls -dt ${DATA_DIR}/${PFX}_n${N}_vm${VM}_$(amtok "$VM")_* 2>/dev/null || true)
       [ "${#reps[@]}" -eq 0 ] && continue
       for r in "${reps[@]}"; do
         cinetic analyze "$r" --topology "$TOPO" --json >/dev/null 2>&1
@@ -56,12 +61,13 @@ for AGG in $AGGRESSORS; do
   # --- Figure-5 heatmap: ratio uncongested/congested (rows=vec, cols=nodes),
   #     aggregated over a cell's reps into mean / std / count -----------------
   PFX="$PFX" NODE_COUNTS="$NODE_COUNTS" VICTIM_MSG_SIZES="$VICTIM_MSG_SIZES" \
-  OUT="$OUT" TOPO="$TOPO" AGGR_MSG="$AGGR_MSG" SUF="$SUF" .venv/bin/python - <<'PY'
+  OUT="$OUT" TOPO="$TOPO" AGGR_MSG="$AGGR_MSG" SUF="$SUF" DATA_DIR="$DATA_DIR" .venv/bin/python - <<'PY'
 import glob, json, os, re, statistics
 from itertools import combinations
 pfx=os.environ["PFX"]; nodes=os.environ["NODE_COUNTS"].split()
 vms=os.environ["VICTIM_MSG_SIZES"].split(); out=os.environ["OUT"]
 am=os.environ.get("AGGR_MSG",""); suf=os.environ.get("SUF","")
+data_dir=os.environ.get("DATA_DIR","data/leonardo")
 def amtok(vm):
     return "am*" if not am else (f"am{vm}" if am=="match" else f"am{am}")
 agg=pfx.split("_")[-1]   # a2a / inc
@@ -160,7 +166,7 @@ mean_rows=[]; std_rows=[]; n_rows=[]; pretty_rows=[]; stat_rows=[]; detail_rows=
 for vm in vms:
     mc=[]; sc=[]; nc=[]; pc=[]
     for n in nodes:
-        runs=glob.glob(f"data/leonardo/{pfx}_n{n}_vm{vm}_{amtok(vm)}_*")
+        runs=glob.glob(f"{data_dir}/{pfx}_n{n}_vm{vm}_{amtok(vm)}_*")
         reps=[]                                   # (run, ratio, node_set, locality)
         for run in runs:
             r=ratio(run)
