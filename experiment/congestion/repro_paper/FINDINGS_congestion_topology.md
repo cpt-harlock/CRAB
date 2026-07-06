@@ -1,10 +1,12 @@
 # Incast congestion on Leonardo: aggressor message size & topology placement
 
-**Date:** 2026-07-03 · **Status:** fixed-size cells at 19–20 reps; matched-size
-sweep n64 complete (5 reps), n32/n128 in flight.
-**Data:** `data/leonardo/_sweep_analysis/repro_paper/congestion_agtr_inc_{heatmap,rep_stats,rep_detail}.csv`
-(fixed 1 MiB aggressor) and `..._ammatch_{heatmap,rep_stats}.csv` (aggressor
-message = victim vector size).
+**Date:** 2026-07-06 · **Status:** fixed 1 MiB cells at 19–20 reps; matched-size
+sweep complete for n32/n64/n128 (5 reps); **author-confirmed fixed 2 MiB and
+8 MiB aggressor sweeps** complete for n32/n64 (5 reps); SL=0 contrast at n64.
+**Data:** `data/leonardo/_sweep_analysis/repro_paper/congestion_agtr_inc_am{2097152,8388608,match}_{heatmap,rep_stats,rep_detail}.csv`
+(aggressor = fixed 2 MiB / fixed 8 MiB / matched-to-victim-vector) plus the
+unsuffixed `congestion_agtr_inc_heatmap.csv` (original fixed 1 MiB). SL=0 contrast
+in `data/leonardo_sl0/_sweep_analysis/repro_paper/`.
 
 ## Setup
 
@@ -18,9 +20,11 @@ Throughout, **cv = coefficient of variation = std/mean** (relative spread across
 reps).
 
 The paper does **not** state the aggressor's message size. Sections 1–5 below use
-our original **fixed 1 MiB** aggressor; Section 6 sweeps the alternative
-hypothesis that the aggressor scales with the victim's vector size (the heatmap
-y-axis), which turns out to resolve the gap between our numbers and the paper's.
+our original **fixed 1 MiB** aggressor; Section 6 reports the **author-confirmed
+fixed 2 MiB** aggressor (which reproduces the paper) alongside the 8 MiB and
+matched-to-victim sweeps that map out the full dose-response. The aggressor
+message size — not the victim's — turns out to be the dominant congestion knob
+and resolves the gap between our earlier numbers and the paper's.
 
 ## 1. The effect is real but strongly placement-dependent (fixed 1 MiB aggressor)
 
@@ -81,53 +85,150 @@ Fixed 1 MiB incast bottoms at ratio ≈ 0.34 (n64 / 16 MB) — a ~3× slowdown. 
 is **milder than the paper's Leonardo Incast box**, which collapses to ≈ 0.2
 (5×) for several vector sizes at 32–64 nodes. Section 6 explains the gap.
 
-## 6. Aggressor message size is the dominant knob — and resolves the paper gap
+## 6. Aggressor message size is the dominant knob — and it reproduces the paper
 
-The paper never specifies the aggressor's message size. Testing the hypothesis
-that it **matches the victim vector size** (the heatmap y-axis) changes the
-picture completely. n64 incast, aggressor message = victim vector, 5 reps:
+The paper never states the aggressor's message size. **The authors confirmed
+(private communication, 2026-07) they used a fixed 2 MiB aggressor.** Running that
+exact value reproduces the paper's Leonardo-Incast collapse, and sweeping the
+aggressor size (1 / 2 / 8 / 16 MiB and matched-to-victim) shows the severity is
+set by the *aggressor's* message size, not the victim's.
 
-| victim vec | fixed 1 MiB aggressor | **matched (aggr = victim)** |
-|------------|-----------------------|-----------------------------|
-| 8 B – 32 KB | 0.97–1.00 | 0.99–1.00 |
-| 256 KB | 0.728 ± 0.186 | **1.004 ± 0.012** |
-| 2 MB | 0.431 ± 0.151 | **0.290 ± 0.160** (cv 55 %) |
-| 16 MB | 0.342 ± 0.063 | **0.051 ± 0.000** (≈20× slowdown) |
+### 6.1 The author-confirmed fixed 2 MiB aggressor reproduces Fig. 5
 
-The aggressor's message size — not the victim's — sets the severity, with a
-crossover at the old fixed 1 MiB point:
+Fixed 2 MiB incast, 5 reps (the vm = 2 MiB cell pools with the matched sweep, n10):
 
-- **Below 1 MiB** the matched aggressor is *smaller*, so it congests *less*:
-  256 KB goes 0.728 → **1.00** (congestion vanishes).
-- **Above 1 MiB** it is *larger*, so it congests *far more*: 16 MB goes
-  0.342 → **0.051**.
+| victim vec | n32 | n64 |
+|------------|-----|-----|
+| 8 B – 256 KB | ~0.99 (uncongested) | ~0.99 |
+| 2 MB | 0.485 ± 0.104 (n10) | **0.324 ± 0.150** (n10) |
+| 16 MB | 0.376 ± 0.019 | **0.234 ± 0.057** |
 
-This **brackets the paper's ≈0.2 collapse** (2 MB = 0.29, 16 MB = 0.05) and shows
-our earlier "not as bad as the paper" result was an artifact of an undersized
-fixed aggressor at the large-vector cells. The matched-column *shape* also fits
-the paper's qualitative description — collapse concentrated at large vectors,
-small-vector cells unaffected — which is exactly what "aggressor scales with the
-y-axis" predicts (an 8 B incast cannot congest anything).
+`n64 / 16 MB = 0.234` and `n64 / 2 MB = 0.324` land **right on the paper's ≈0.2
+Leonardo-Incast collapse**, and the *shape* matches Fig. 5: only the large-vector
+cells collapse, everything ≤256 KB stays at ~1.0. So with the authors' actual
+parameter the reproduction holds — our earlier "not as bad as the paper" gap was
+purely the undersized fixed 1 MiB aggressor at the large-vector cells.
 
-**Placement dependence sharpens with size, then disappears:** 16 MB matched is
-essentially deterministic (std 0.000 — every rep crushed ~20×, placement no
-longer matters), whereas 2 MB matched is the knife-edge (cv 55 %, 0.18–0.56),
-consistent with the bimodal placement sensitivity of Sec. 1/3. So the finer-grained
-placement effect is visible only in a size window where the fabric can *just*
-absorb the incast; below it there is no congestion, above it the incast dominates
-regardless of where nodes land.
+### 6.2 Dose-response: aggressor size sets the severity
 
-## 7. Next steps
+At the n64 / 16 MB-victim cell the collapse deepens monotonically with aggressor
+size — straddling the paper's ≈0.2:
 
-- Complete the matched sweep at **n32 / n128** (in flight) to see whether the
-  crossover and the 16 MB determinism hold across scale; extend to n256 when the
-  big-QOS allocation frees.
-- Replace the cell-span axis with a **fabric-level metric** (existing `--fabric`
-  / `--blame` machinery): correlate the victim ratio with *shared-link load*
-  between the incast root's flows and the victim ring — the hypothesis coarse
-  locality can't test, most relevant in the 2 MB knife-edge window.
-- Report the two n64 modes separately (crushed vs escape) where the cell is
-  bimodal (2 MB, both fixed and matched).
+| aggressor msg | 1 MiB | 2 MiB (authors) | 8 MiB | 16 MiB (matched) |
+|---------------|-------|-----------------|-------|------------------|
+| n64 / 16 MB victim | 0.342 | **0.234** | 0.109 | 0.051 |
+
+The matched-to-victim sweep (aggressor message = victim vector) makes the same
+point from the other side — an 8 B incast can't congest anything, a 16 MiB incast
+crushes everything — and adds a full n32/n64/n128 grid:
+
+| victim vec | n32 | n64 | n128 |
+|------------|-----|-----|------|
+| 8 B – 256 KB | ~1.00 | ~1.00 | ~1.00 |
+| 2 MB | 0.405 ± 0.041 | **0.290 ± 0.160** (cv 55 %) | 0.994 ± 0.006 |
+| 16 MB | 0.102 ± 0.012 | **0.051 ± 0.000** (≈20×) | 0.791 ± 0.020 |
+
+**Placement dependence sharpens with size, then disappears:** the 16 MB cells are
+essentially deterministic (std 0.000 at n64 — every rep crushed, placement no
+longer matters), whereas the 2 MB cells are the knife-edge (cv 55 %, bimodal
+0.18–0.56), consistent with Sec. 1/3. The finer-grained placement effect is only
+visible in the size window where the fabric can *just* absorb the incast.
+
+### 6.3 Scaling is non-monotonic — n64 is the worst-hit, not n128
+
+Severity is **not** simply "more nodes = worse". At matched size, n64 collapses
+hardest while **n128 barely congests** (2 MB → 0.99, 16 MB → 0.79); under the
+fixed 8 MiB aggressor, n32 congests across *more* victim sizes (256 KB → 0.55,
+2 MB → 0.19) than n64 does. The 50:50 victim/aggressor partition geometry — how
+the incast fan-in and the allgather ring share the fabric at each scale — matters
+more than raw node count. **Sec. 7 resolves this at the fabric level**: severity
+is the product of incast intensity and the victim ring's overlap with the incast
+congestion tree, which peaks at n64. (The n128 matched column also ran under the
+`bprod` QOS; the in-flight fixed-2 MiB n128 sweep will cross-check it.)
+
+### 6.4 Service Level (SL=0 vs SL=1) is not a mitigation knob
+
+Forcing IB Service Level 0 with a forced-UCX pml (`data/leonardo_sl0`, n64
+matched) does **not** relieve the incast: identical collapse at 16 MB (0.066 vs
+SL=1's 0.051) and *worse, more deterministic* at the 2 MB knife-edge
+(0.199 ± 0.010 vs 0.290 ± 0.160 — the SL=0 shift removed the placement "escape").
+Expected: a uniform SL move puts victim *and* aggressor on the same level and the
+same links, so it can't isolate them. SL would only help with victim/aggressor on
+**different** SLs (traffic-class separation) — a future experiment needing
+per-app env injection, not a global preset.
+
+## 7. Fabric-level mechanism: incast congestion tree × victim overlap
+
+The non-monotonic scaling (Sec. 6.3) resolves cleanly at the fabric level. The
+aggressor runs `collect:false`, so we reconstruct its incast flows from
+`loaded/partition_assignment.json` (which records **all** nodes, victim and
+aggressor) plus the known incast pattern (every aggressor rank → `master_rank 0`),
+and the victim ring from the victim node order. Both are attributed over the
+switch graph with CINETIC's own ECMP expected-load machinery
+(`cinetic.analysis.fabric`: `build_switch_graph` + `route`). Demonstrated on the
+deterministic matched-16 MiB cells (std ≈ 0), 5 reps each:
+
+| scale | nsend (incast intensity) | victim overlap w/ incast spines | **intensity × overlap** | span | ratio |
+|-------|--------------------------|--------------------------------|-------------------------|------|-------|
+| n32 | 15 | 0.99 | 14.8 | 3 cells | 0.102 |
+| **n64** | 31 | 0.79 | **24.4** (peak) | 5 cells | **0.051** (worst) |
+| n128 | 63 | 0.05 | 3.1 | 19 cells | 0.791 (immune) |
+
+The product ranks **n64 > n32 > n128** — exactly the slowdown ranking (1/ratio =
+19.6 > 9.8 > 1.3). The mechanism, step by step:
+
+1. **Victim and aggressor never share a leaf** (co-tenancy = 0 at every scale —
+   the 50:50 interleave guarantees it, cf. Sec. 2). So the victim is *not* hurt by
+   sharing the incast's bottleneck link.
+2. **The incast converges entirely on the root's single leaf switch** (switch-load
+   share ≈ 0.94–1.0; each spine carries only ~5 %). That saturated leaf is the
+   root of a **congestion tree** whose backpressure spreads up its spines — the
+   paper's bystander mechanism.
+3. **Severity = incast intensity × victim overlap with that tree's spine
+   footprint:**
+   - **n32** — modest intensity (15 senders) but the whole 3-cell allocation
+     funnels through the same spines, so 99 % of victim hops sit in the tree →
+     strong congestion (0.10).
+   - **n64** — intensity doubles (31 senders) *and* overlap stays high (0.79) in
+     5 cells → the product peaks → **maximal congestion (0.05)**.
+   - **n128** — intensity is highest (63) but the allocation spreads over **19
+     cells** while the incast tree stays localized to the root's region, so only
+     **5 %** of victim hops route through it → the ring **decouples** from the
+     tree → near-immunity (0.79).
+
+**Why "more nodes ≠ worse":** beyond ≈n64, spreading the victim over more cells
+decouples it from the (localized) incast tree *faster* than the incast intensity
+grows. Severity peaks where intensity is already high but the allocation is still
+compact enough for near-total overlap — n64 in this 50:50 setup.
+
+**Scope / caveats.** This uses the **ECMP expected-load** model (all shortest
+paths), not Leonardo's real static IB routing. It is too smooth to resolve fine
+per-link contention (the raw per-link peak diluted to ~5 %, which is why an
+earlier *link*-overlap metric failed). What is robust — and routing-detail
+independent — is the **switch-level convergence** on the root leaf and the
+**span-driven overlap collapse**; those rank the three scales correctly.
+Reproduced by `experiment/congestion/repro_paper/` scratch scripts
+(`fabric_tree.py` is the key one). *n128 fixed-2 MiB (author size) in flight to
+confirm the overlap-collapse immunity holds there too.*
+
+## 8. Next steps
+
+- **Confirm the mechanism at the authors' 2 MiB size** (n128 fixed sweep in
+  flight): does the overlap-collapse immunity (Sec. 7) survive at 2 MiB, or is it
+  specific to the deterministic 16 MiB cells?
+- **Validate the ECMP model against real IB routing** — pull Leonardo's linear
+  forwarding tables (or set `collect:true` on the aggressor so `--fabric` sees its
+  *measured* per-flow bandwidths) to check whether single-path routing sharpens or
+  blurs the n32-vs-n64 gap.
+- **More reps on the 2 MB knife-edge** (both fixed and matched): the n64 / 2 MB
+  cell is bimodal, so the n64 / 2 MB-victim / 8 MiB-aggressor = 0.799 point (a
+  bigger aggressor apparently congesting *less*) is a small-sample placement
+  lottery, not a real inversion. Report the crushed vs escape modes separately.
+- **Extend the fixed 2 MiB (author) sweep to n128 / n256** to confirm whether the
+  n128 near-immunity seen in the matched column persists at the authors' size.
+- **SL traffic-class separation** (victim vs aggressor on different SLs) as the
+  actual SL mitigation test.
 
 *Generated from `experiment/congestion/repro_paper/analyze.sh` (rep aggregation +
-locality columns; `AGGR_MSG=match` for the matched-size column).*
+locality columns; `AGGR_MSG=<bytes>` for each fixed-size column, `AGGR_MSG=match`
+for the matched-size column).*

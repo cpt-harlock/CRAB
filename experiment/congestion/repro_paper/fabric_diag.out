@@ -1,0 +1,21 @@
+
+########## n32  (measured matched-16MiB ratio = 0.102) ##########
+  rep0: root=lrdn0009 rootleaf=S-0800380300c0d400(leaf) rootcell=cell18 nsend=15 span=3cells victimE=0.0421
+        incast rootleaf switch-load frac=1.000; top switches: 00c0d400(l)1.00, 00c16ca0(l)0.07, 00c0d540(l)0.07, 00c0de00(l)0.07, 00c0db00(l)0.07
+  rep1: root=lrdn0009 rootleaf=S-0800380300c0d400(leaf) rootcell=cell18 nsend=15 span=3cells victimE=0.0451
+        incast rootleaf switch-load frac=1.000; top switches: 00c0d400(l)1.00, 00c16ca0(l)0.07, 00c0d540(l)0.07, 00c0de00(l)0.07, 00c0db00(l)0.07
+  >> n32 AGG: victimE=0.0445  rootleaf_incast_share=1.000  span=3.0cells  reps=5
+
+########## n64  (measured matched-16MiB ratio = 0.051) ##########
+  rep0: root=lrdn0009 rootleaf=S-0800380300c0d400(leaf) rootcell=cell18 nsend=31 span=5cells victimE=0.0252
+        incast rootleaf switch-load frac=0.935; top switches: 00c0d400(l)0.94, 00c0d8a0(s)0.05, 00c0da20(s)0.05, 00bfb600(s)0.05, 00c16200(s)0.05
+  rep1: root=lrdn0009 rootleaf=S-0800380300c0d400(leaf) rootcell=cell18 nsend=31 span=5cells victimE=0.0252
+        incast rootleaf switch-load frac=0.935; top switches: 00c0d400(l)0.94, 00c0d8a0(s)0.05, 00c0da20(s)0.05, 00bfb600(s)0.05, 00c0d580(s)0.05
+  >> n64 AGG: victimE=0.0249  rootleaf_incast_share=0.935  span=5.0cells  reps=5
+
+########## n128  (measured matched-16MiB ratio = 0.791) ##########
+  rep0: root=lrdn0049 rootleaf=S-0800380300c15ee0(leaf) rootcell=cell18 nsend=63 span=19cells victimE=0.0071
+        incast rootleaf switch-load frac=0.984; top switches: 00c15ee0(l)0.98, 00c0da20(s)0.06, 00bfb600(s)0.06, 00c16100(s)0.06, 00c0dfc0(s)0.06
+  rep1: root=lrdn0049 rootleaf=S-0800380300c15ee0(leaf) rootcell=cell18 nsend=63 span=19cells victimE=0.0071
+        incast rootleaf switch-load frac=0.984; top switches: 00c15ee0(l)0.98, 00c0da20(s)0.06, 00bfb600(s)0.06, 00c16100(s)0.06, 00c0dfc0(s)0.06
+  >> n128 AGG: victimE=0.0090  rootleaf_incast_share=0.981  span=18.8cells  reps=5
