@@ -97,17 +97,27 @@ set by the *aggressor's* message size, not the victim's.
 
 Fixed 2 MiB incast, 5 reps (the vm = 2 MiB cell pools with the matched sweep, n10):
 
-| victim vec | n32 | n64 |
-|------------|-----|-----|
-| 8 B – 256 KB | ~0.99 (uncongested) | ~0.99 |
-| 2 MB | 0.485 ± 0.104 (n10) | **0.324 ± 0.150** (n10) |
-| 16 MB | 0.376 ± 0.019 | **0.234 ± 0.057** |
+| victim vec | n32 | n64 | n128 |
+|------------|-----|-----|------|
+| 8 B – 256 KB | ~0.99 (uncongested) | ~0.99 | ~0.99 |
+| 2 MB | 0.485 ± 0.104 (n10) | **0.324 ± 0.150** (n10) | 0.993 ± 0.007 (n10) |
+| 16 MB | 0.376 ± 0.019 | **0.234 ± 0.057** | 0.576 ± 0.476 (cv 83 %, n4) |
 
 `n64 / 16 MB = 0.234` and `n64 / 2 MB = 0.324` land **right on the paper's ≈0.2
 Leonardo-Incast collapse**, and the *shape* matches Fig. 5: only the large-vector
 cells collapse, everything ≤256 KB stays at ~1.0. So with the authors' actual
 parameter the reproduction holds — our earlier "not as bad as the paper" gap was
 purely the undersized fixed 1 MiB aggressor at the large-vector cells.
+
+**n128 confirms the overlap-collapse immunity (Sec. 7) at the authors' size.** The
+n128 / 2 MB victim is *fully immune and deterministic* (0.993 ± 0.007, cv 0.7 %) —
+identical to the matched-16 MiB n128 column — so the near-immunity is **not** a
+16-MiB-specific artefact. The n128 / 16 MB victim is a **bimodal placement
+lottery** (mean 0.576 but cv 83 %, std 0.48 over 4 reps: individual reps span
+crushed→immune), i.e. n128 sits on the knife-edge where *most* placements decouple
+the victim ring from the incast tree but the occasional compact draw still
+overlaps it — exactly Sec. 7's overlap-collapse operating at its margin, not a
+clean partial-collapse.
 
 ### 6.2 Dose-response: aggressor size sets the severity
 
@@ -143,8 +153,9 @@ fixed 8 MiB aggressor, n32 congests across *more* victim sizes (256 KB → 0.55,
 the incast fan-in and the allgather ring share the fabric at each scale — matters
 more than raw node count. **Sec. 7 resolves this at the fabric level**: severity
 is the product of incast intensity and the victim ring's overlap with the incast
-congestion tree, which peaks at n64. (The n128 matched column also ran under the
-`bprod` QOS; the in-flight fixed-2 MiB n128 sweep will cross-check it.)
+congestion tree, which peaks at n64. (Both the n128 matched column and the
+fixed-2 MiB n128 sweep ran under the `bprod` QOS and agree: n128 / 2 MB stays
+immune at ~0.99 either way — Sec. 6.1.)
 
 ### 6.4 Service Level (SL=0 vs SL=1) is not a mitigation knob
 
@@ -208,14 +219,17 @@ earlier *link*-overlap metric failed). What is robust — and routing-detail
 independent — is the **switch-level convergence** on the root leaf and the
 **span-driven overlap collapse**; those rank the three scales correctly.
 Reproduced by `experiment/congestion/repro_paper/` scratch scripts
-(`fabric_tree.py` is the key one). *n128 fixed-2 MiB (author size) in flight to
-confirm the overlap-collapse immunity holds there too.*
+(`fabric_tree.py` is the key one). **The n128 fixed-2 MiB (author size) sweep
+confirms the overlap-collapse immunity holds there too:** n128 / 2 MB = 0.993
+(fully immune, deterministic), and n128 / 16 MB is a bimodal placement lottery
+(cv 83 %) — the tree-decoupling operating right at its margin (Sec. 6.1).
 
 ## 8. Next steps
 
-- **Confirm the mechanism at the authors' 2 MiB size** (n128 fixed sweep in
-  flight): does the overlap-collapse immunity (Sec. 7) survive at 2 MiB, or is it
-  specific to the deterministic 16 MiB cells?
+- ✅ **Confirmed the mechanism at the authors' 2 MiB size** (n128 fixed sweep,
+  done 2026-07): the overlap-collapse immunity (Sec. 7) survives — n128 / 2 MB =
+  0.993 (deterministic), n128 / 16 MB bimodal (cv 83 %). It is **not** specific to
+  the 16 MiB cells.
 - **Validate the ECMP model against real IB routing** — pull Leonardo's linear
   forwarding tables (or set `collect:true` on the aggressor so `--fabric` sees its
   *measured* per-flow bandwidths) to check whether single-path routing sharpens or
@@ -224,8 +238,10 @@ confirm the overlap-collapse immunity holds there too.*
   cell is bimodal, so the n64 / 2 MB-victim / 8 MiB-aggressor = 0.799 point (a
   bigger aggressor apparently congesting *less*) is a small-sample placement
   lottery, not a real inversion. Report the crushed vs escape modes separately.
-- **Extend the fixed 2 MiB (author) sweep to n128 / n256** to confirm whether the
-  n128 near-immunity seen in the matched column persists at the authors' size.
+- **Extend the fixed 2 MiB (author) sweep to n256** (n128 done — see above) to
+  trace how far the near-immunity persists as the allocation keeps spreading; and
+  add reps to the bimodal n128 / 16 MB cell (n4 → n≥10) to separate its
+  crushed vs escape modes.
 - **SL traffic-class separation** (victim vs aggressor on different SLs) as the
   actual SL mitigation test.
 
