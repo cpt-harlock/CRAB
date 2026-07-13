@@ -119,6 +119,20 @@ the victim ring from the incast tree but the occasional compact draw still
 overlaps it — exactly Sec. 7's overlap-collapse operating at its margin, not a
 clean partial-collapse.
 
+> **Data quality (n128).** The n128 tier runs under the `bprod` QOS and 70/85
+> reps (82 %) produced a ratio; the heatmap averages **only** those (the `_n`
+> file records the surviving count per cell). Attrition is two kinds: **5
+> Prolog/node failures** (pre-run infra, uncorrelated with congestion — benign)
+> and **6 walltime cancellations** (the 30-min cap is tight for n128's
+> baseline+loaded sequence). The walltime drops carry a mild *optimistic-bias*
+> risk (a congested victim runs slower → likelier to be cancelled → dropped), but
+> they land almost entirely in the secondary **8 MiB-aggressor** cells. The
+> headline author-2 MiB cells are unaffected: n128 / 2 MB = 0.993 has **n10, zero
+> drops**, and n128 / 16 MB's single drop is a Prolog failure, so its bimodal
+> spread is genuinely small-sample, not selection bias. The 8 MiB-aggressor n128
+> numbers should be firmed up with a longer-walltime rerun before they are leaned
+> on.
+
 ### 6.2 Dose-response: aggressor size sets the severity
 
 At the n64 / 16 MB-victim cell the collapse deepens monotonically with aggressor
@@ -277,6 +291,11 @@ confirms the overlap-collapse immunity holds there too:** n128 / 2 MB = 0.993
   trace how far the near-immunity persists as the allocation keeps spreading; and
   add reps to the bimodal n128 / 16 MB cell (n4 → n≥10) to separate its
   crushed vs escape modes.
+- **Rerun the n128 tier with a longer walltime** (≥ 00:60:00): the 30-min cap
+  cost ~7 % of reps to walltime cancellation (Sec. 6.1 data-quality note),
+  which carries a mild optimistic bias for the 8 MiB-aggressor n128 cells whose
+  slower loaded phase is likelier to be cancelled. A longer walltime removes the
+  attrition and de-risks those secondary numbers.
 - **SL traffic-class separation** (victim vs aggressor on different SLs) as the
   actual SL mitigation test.
 
