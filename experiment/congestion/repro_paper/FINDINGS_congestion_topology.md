@@ -168,6 +168,34 @@ same links, so it can't isolate them. SL would only help with victim/aggressor o
 **different** SLs (traffic-class separation) — a future experiment needing
 per-app env injection, not a global preset.
 
+### 6.5 All-to-all is benign at the same size — the aggressor *pattern*, not just its bytes, sets severity
+
+Running the **all-to-all** aggressor at the authors' exact 2 MiB size (n32/n64,
+full victim sweep, 5 reps) produces **essentially no congestion** — every cell
+sits within noise of 1.0:
+
+| victim vec | n32 (a2a) | n64 (a2a) | — | n32 (incast) | n64 (incast) |
+|------------|-----------|-----------|---|--------------|--------------|
+| 8 B – 256 KB | ~1.00 | ~1.00 | | ~0.99 | ~0.99 |
+| 2 MB | 0.984 ± 0.007 | **0.948 ± 0.073** | | 0.485 | **0.324** |
+| 16 MB | 0.993 ± 0.012 | 0.993 ± 0.006 | | 0.376 | **0.234** |
+
+At the **identical** per-flow message size, incast crushes the large-victim cells
+(down to 0.23) while all-to-all barely perturbs them (worst cell n64 / 2 MB =
+0.948, a ≤5 % slowdown that is itself within rep scatter). The two aggressors move
+comparable total bytes — a2a's *every rank → every peer* is if anything more
+aggregate traffic than incast's *every rank → one root* — so **severity is not set
+by how much data the aggressor moves, but by whether that data converges to a
+hotspot.** Incast concentrates on one root leaf and builds the congestion tree of
+Sec. 7; all-to-all spreads uniformly across the fabric with no convergence point,
+so there is no tree and no bystander throttling.
+
+**Caveat / scope.** This says a2a is benign *at incast-matched 2 MiB and
+n32–n64*, not that a2a can never congest. A large enough a2a message or node count
+could saturate links even under uniform spread (the paper may have used a larger
+a2a size); the clean result here is the **pattern contrast at fixed size**, which
+is exactly what the hotspot mechanism predicts.
+
 ## 7. Fabric-level mechanism: incast congestion tree × victim overlap
 
 The non-monotonic scaling (Sec. 6.3) resolves cleanly at the fabric level. The
@@ -211,6 +239,13 @@ The product ranks **n64 > n32 > n128** — exactly the slowdown ranking (1/ratio
 decouples it from the (localized) incast tree *faster* than the incast intensity
 grows. Severity peaks where intensity is already high but the allocation is still
 compact enough for near-total overlap — n64 in this 50:50 setup.
+
+**Control that isolates the mechanism (Sec. 6.5):** the all-to-all aggressor is
+step 2's negation — it has *no* convergence point, so no root leaf saturates and
+no tree forms. The prediction is "no bystander throttling", and indeed a2a at the
+same 2 MiB / n32–n64 leaves the victim at ~0.95–1.0 while incast drives it to
+0.23. Same bytes, same placement rules, opposite outcome — the congestion tree,
+not the traffic volume, is what hurts the victim.
 
 **Scope / caveats.** This uses the **ECMP expected-load** model (all shortest
 paths), not Leonardo's real static IB routing. It is too smooth to resolve fine
