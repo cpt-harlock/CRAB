@@ -95,15 +95,16 @@ set by the *aggressor's* message size, not the victim's.
 
 ### 6.1 The author-confirmed fixed 2 MiB aggressor reproduces Fig. 5
 
-Fixed 2 MiB incast, 5 reps (the vm = 2 MiB cell pools with the matched sweep, n10):
+Fixed 2 MiB incast (large-victim cells firmed up to n10–15 reps; the vm = 2 MiB
+cell also pools with the matched sweep):
 
 | victim vec | n32 | n64 | n128 |
 |------------|-----|-----|------|
 | 8 B – 256 KB | ~0.99 (uncongested) | ~0.99 | ~0.99 |
-| 2 MB | 0.485 ± 0.104 (n10) | **0.324 ± 0.150** (n10) | 0.993 ± 0.007 (n10) |
-| 16 MB | 0.376 ± 0.019 | **0.234 ± 0.057** | 0.576 ± 0.476 (cv 83 %, n4) |
+| 2 MB | 0.431 ± 0.118 (n15) | **0.292 ± 0.143** (n15) | 0.993 ± 0.007 (n10) |
+| 16 MB | 0.376 ± 0.019 (n5) | **0.209 ± 0.047** (n10) | 0.777 ± 0.325 (cv 42 %, n10) |
 
-`n64 / 16 MB = 0.234` and `n64 / 2 MB = 0.324` land **right on the paper's ≈0.2
+`n64 / 16 MB = 0.209` and `n64 / 2 MB = 0.292` land **right on the paper's ≈0.2
 Leonardo-Incast collapse**, and the *shape* matches Fig. 5: only the large-vector
 cells collapse, everything ≤256 KB stays at ~1.0. So with the authors' actual
 parameter the reproduction holds — our earlier "not as bad as the paper" gap was
@@ -113,25 +114,25 @@ purely the undersized fixed 1 MiB aggressor at the large-vector cells.
 n128 / 2 MB victim is *fully immune and deterministic* (0.993 ± 0.007, cv 0.7 %) —
 identical to the matched-16 MiB n128 column — so the near-immunity is **not** a
 16-MiB-specific artefact. The n128 / 16 MB victim is a **bimodal placement
-lottery** (mean 0.576 but cv 83 %, std 0.48 over 4 reps: individual reps span
-crushed→immune), i.e. n128 sits on the knife-edge where *most* placements decouple
-the victim ring from the incast tree but the occasional compact draw still
-overlaps it — exactly Sec. 7's overlap-collapse operating at its margin, not a
-clean partial-collapse.
+lottery**: growing it from n4 to n10 moved the mean from 0.576 to **0.777 ± 0.325
+(cv 42 %)** — i.e. with proper sampling n128 leans *more* immune, but individual
+reps still span crushed→immune. n128 sits on the knife-edge where *most*
+placements decouple the victim ring from the incast tree while the occasional
+compact draw still overlaps it — Sec. 7's overlap-collapse operating at its
+margin, not a clean partial-collapse.
 
-> **Data quality (n128).** The n128 tier runs under the `bprod` QOS and 70/85
-> reps (82 %) produced a ratio; the heatmap averages **only** those (the `_n`
-> file records the surviving count per cell). Attrition is two kinds: **5
-> Prolog/node failures** (pre-run infra, uncorrelated with congestion — benign)
-> and **6 walltime cancellations** (the 30-min cap is tight for n128's
-> baseline+loaded sequence). The walltime drops carry a mild *optimistic-bias*
-> risk (a congested victim runs slower → likelier to be cancelled → dropped), but
-> they land almost entirely in the secondary **8 MiB-aggressor** cells. The
-> headline author-2 MiB cells are unaffected: n128 / 2 MB = 0.993 has **n10, zero
-> drops**, and n128 / 16 MB's single drop is a Prolog failure, so its bimodal
-> spread is genuinely small-sample, not selection bias. The 8 MiB-aggressor n128
-> numbers should be firmed up with a longer-walltime rerun before they are leaned
-> on.
+> **Data quality (n128), resolved.** The n128 tier runs under the `bprod` QOS,
+> and the original 30-min-walltime sweep lost ~18 % of reps (5 Prolog/node
+> failures — benign, uncorrelated — plus 6 walltime cancellations that carried a
+> mild *optimistic bias*, since a congested victim runs slower and is likelier to
+> be cancelled mid-collapse). A **60-min-walltime rerun** (2026-07) removed the
+> attrition and **confirmed the bias was real and downward**: pooling the clean
+> reps pulled the entire 8 MiB-aggressor n128 column down — e.g. 16 MB victim
+> 0.910 (n4) → **0.691 (n9)**, 2 MB 0.660 → 0.679, 256 KB 0.848 → 0.774. The
+> heatmap still averages only reps with a ratio (the `_n` file records the count),
+> but those counts are now n8–15 and the walltime blind spot is closed. The
+> headline author-2 MiB cells were never affected (n128 / 2 MB = 0.993, n10, zero
+> drops).
 
 ### 6.2 Dose-response: aggressor size sets the severity
 
@@ -170,6 +171,21 @@ is the product of incast intensity and the victim ring's overlap with the incast
 congestion tree, which peaks at n64. (Both the n128 matched column and the
 fixed-2 MiB n128 sweep ran under the `bprod` QOS and agree: n128 / 2 MB stays
 immune at ~0.99 either way — Sec. 6.1.)
+
+**Aggressor intensity changes the *shape* of the n128 response, not just its
+depth.** After the de-biased rerun (Sec. 6.1), the two aggressor sizes diverge
+qualitatively at n128:
+- **2 MiB** — n128 is *selectively* immune: only the largest (bandwidth-bound)
+  victims see anything, and even those bimodally (16 MB → 0.78; ≤256 KB → ~1.0).
+- **8 MiB** — n128 congestion goes **broadband**: *every* victim size is
+  depressed to ~0.65–0.77, including the small, latency-bound ones (8 B → 0.73,
+  512 B → 0.69) that the 2 MiB aggressor leaves untouched. A 4× more intense
+  incast saturates enough fabric that its queueing-latency tax hits even
+  small-message collectives (which are latency-bound, so a fixed per-hop delay
+  costs them proportionally as much as it costs the bandwidth-bound large ones).
+So "does n128 congest?" has no single answer — it depends on whether the
+aggressor is intense enough to spill congestion beyond the bandwidth-bound
+regime. This is the size axis of the same intensity×overlap story (Sec. 7).
 
 ### 6.4 Service Level (SL=0 vs SL=1) is not a mitigation knob
 
@@ -283,19 +299,28 @@ confirms the overlap-collapse immunity holds there too:** n128 / 2 MB = 0.993
   forwarding tables (or set `collect:true` on the aggressor so `--fabric` sees its
   *measured* per-flow bandwidths) to check whether single-path routing sharpens or
   blurs the n32-vs-n64 gap.
-- **More reps on the 2 MB knife-edge** (both fixed and matched): the n64 / 2 MB
-  cell is bimodal, so the n64 / 2 MB-victim / 8 MiB-aggressor = 0.799 point (a
-  bigger aggressor apparently congesting *less*) is a small-sample placement
-  lottery, not a real inversion. Report the crushed vs escape modes separately.
-- **Extend the fixed 2 MiB (author) sweep to n256** (n128 done — see above) to
-  trace how far the near-immunity persists as the allocation keeps spreading; and
-  add reps to the bimodal n128 / 16 MB cell (n4 → n≥10) to separate its
-  crushed vs escape modes.
-- **Rerun the n128 tier with a longer walltime** (≥ 00:60:00): the 30-min cap
-  cost ~7 % of reps to walltime cancellation (Sec. 6.1 data-quality note),
-  which carries a mild optimistic bias for the 8 MiB-aggressor n128 cells whose
-  slower loaded phase is likelier to be cancelled. A longer walltime removes the
-  attrition and de-risks those secondary numbers.
+- ✅ **Resolved the n64 / 2 MB-victim / 8 MiB-aggressor "anomaly"** (rerun to
+  n10): the 0.799 point that looked like "a bigger aggressor congesting *less*"
+  was a small-sample artefact — it is now **0.419 ± 0.404 (cv 96 %)**, a violently
+  bimodal knife-edge (reps split ~0.05 crushed vs ~1.0 escape), **not** a real
+  monotonicity inversion. The 2 MB knife-edge cells stay bimodal even at n10–15
+  (n32 / 2 MB cv 27 %, n64 / 2 MB cv 49 %), so the bimodality is real placement
+  variance, not undersampling.
+- ✅ **Reran the n128 tier at 60-min walltime** (2026-07): removed the attrition
+  and confirmed the 8 MiB-aggressor n128 column was optimistically biased —
+  de-biasing pulled it down (16 MB 0.910 → 0.691) and exposed the broadband
+  congestion of Sec. 6.3. n128 / 16 MB bimodal cell grown to n10.
+- **Validate the ECMP model against real IB routing** — pull Leonardo's linear
+  forwarding tables (or set `collect:true` on the aggressor so `--fabric` sees its
+  *measured* per-flow bandwidths) to check whether single-path routing sharpens or
+  blurs the n32-vs-n64 gap.
+- **Extend the fixed 2 MiB (author) sweep to n256** to trace how far the
+  near-immunity persists as the allocation keeps spreading.
+- **20-rep interleaved full 2 MiB grid** (in flight): resubmitting every heatmap
+  cell (n32/n64/n128 × 8 victim sizes) at 20 reps with reps *interleaved* across
+  configs (rep k of every cell before rep k+1 of any) to decorrelate transient
+  fabric conditions from individual cells — the definitive error bars for the
+  bimodal knife-edge cells.
 - **SL traffic-class separation** (victim vs aggressor on different SLs) as the
   actual SL mitigation test.
 
