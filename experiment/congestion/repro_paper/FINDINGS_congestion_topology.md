@@ -159,6 +159,34 @@ longer matters), whereas the 2 MB cells are the knife-edge (cv 55 %, bimodal
 0.18–0.56), consistent with Sec. 1/3. The finer-grained placement effect is only
 visible in the size window where the fabric can *just* absorb the incast.
 
+**The knee is a cliff at 512 KiB → 1 MiB, then a plateau, not a gradual ramp.**
+Filling the two ×8 gaps (256 KB→2 MB and 2 MB→16 MB) with 512 KiB/1 MiB/4 MiB/
+8 MiB (n32/n64, 20 reps, incast 2 MiB aggressor) resolves the transition:
+
+| victim vec | n32 | n64 |
+|------------|-----|-----|
+| 256 KiB | 0.96 ± 0.08 | 0.90 ± 0.15 |
+| **512 KiB** | 0.90 ± 0.14 | 0.80 ± 0.15 |
+| **1 MiB** | **0.44 ± 0.12** | **0.64 ± 0.13** |
+| 2 MiB | 0.44 ± 0.10 (n35) | 0.34 ± 0.15 (n35) |
+| 4 MiB | 0.27 ± 0.02 | 0.27 ± 0.02 |
+| 8 MiB | 0.35 ± 0.04 | 0.22 ± 0.03 |
+| 16 MiB | 0.37 ± 0.03 | 0.25 ± 0.15 |
+
+- **Almost the entire collapse happens in one octave** (512 KiB → 1 MiB): n32
+  drops from 0.90 to 0.44, n64 from 0.80 to 0.64 — a bigger single-step fall than
+  the next 4 doublings combined.
+- **Past 1 MiB the ratio plateaus**, it does not keep falling with victim size —
+  2/4/8/16 MiB all sit in the same 0.22–0.44 band per node count, i.e. once the
+  victim message is big enough to be bandwidth-bound under the incast, further
+  growth doesn't deepen the collapse.
+- **n64 / 1 MiB (0.64) sits above n64 / 2 MiB (0.34)** — a local bump right at the
+  knee rather than a smooth monotone descent, consistent with a threshold
+  transition (queue buildup crossing a saturation point) rather than a
+  proportional bandwidth-contention effect. n32's knee is smoother.
+- Both node counts knee at the **same size** (1 MiB), but n64 dips deeper past it
+  — consistent with Sec. 6.3/7's severity ranking (n64 worse than n32).
+
 ### 6.3 Scaling is non-monotonic — n64 is the worst-hit, not n128
 
 Severity is **not** simply "more nodes = worse". At matched size, n64 collapses

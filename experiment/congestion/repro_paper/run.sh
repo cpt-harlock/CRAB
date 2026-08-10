@@ -17,9 +17,11 @@
 # and CHAIN=1 serializes the grid (no cross-job false congestion).
 set -uo pipefail
 
-# --- axes (paper: 16..256 nodes, vectors 8 B .. 16 MiB x8) -------------------
+# --- axes (paper: 16..256 nodes, vectors 8 B .. 16 MiB x8; we added 512 KiB/1 MiB/
+#     4/8 MiB for extra resolution around the collapse observed between 256 KiB and
+#     16 MiB) -----
 NODE_COUNTS="${NODE_COUNTS:-16 32 64 128 256}"
-VICTIM_MSG_SIZES="${VICTIM_MSG_SIZES:-8 64 512 4096 32768 262144 2097152 16777216}"
+VICTIM_MSG_SIZES="${VICTIM_MSG_SIZES:-8 64 512 4096 32768 262144 524288 1048576 2097152 4194304 8388608 16777216}"
 AGGRESSORS="${AGGRESSORS:-alltoall incast}"
 ITERS="${ITERS:-1000}"; WARMUP="${WARMUP:-100}"
 WALLTIME="${WALLTIME:-00:30:00}"
@@ -48,8 +50,8 @@ cd "$REPO_ROOT" || exit 1
 source experiment/lib/launch.sh
 GEN="experiment/congestion/repro_paper/generated"; mkdir -p "$GEN"
 
-for AGG in $AGGRESSORS; do
-  for N in $NODE_COUNTS; do
+for N in $NODE_COUNTS; do
+  for AGG in $AGGRESSORS; do
     for VM in $VICTIM_MSG_SIZES; do
       if [ "$AGGR_MSG" = "match" ]; then amsg="$VM"; else amsg="$AGGR_MSG"; fi
       for REP in $(seq 1 "$REPS"); do
@@ -71,6 +73,6 @@ launch_footer
 echo "  axes: nodes={$NODE_COUNTS}  victim-vec={$VICTIM_MSG_SIZES}  aggr-msg=$AGGR_MSG  reps=$REPS"
 echo "Analyze with: experiment/congestion/repro_paper/analyze.sh"
 echo
-echo "NB: full grid = 2x5x8 = 80 cells up to 256 Booster nodes, x REPS jobs each."
+echo "NB: full grid = 2x5x12 = 120 cells up to 256 Booster nodes, x REPS jobs each."
 echo "    Start with a subset, e.g."
 echo "    NODE_COUNTS='16 32' VICTIM_MSG_SIZES='4096 2097152' REPS=5 CHAIN=1 $0"
